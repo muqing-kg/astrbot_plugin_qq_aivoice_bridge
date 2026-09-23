@@ -1,0 +1,264 @@
+{
+  "basic": {
+    "description": "基础设置",
+    "type": "object",
+    "items": {
+      "enabled": {
+        "description": "启用 QQ 声聊 TTS",
+        "hint": "总开关。关闭后插件不自动生成语音，也不执行后续处理。",
+        "type": "bool",
+        "default": true
+      },
+      "qq_platforms": {
+        "description": "识别为 QQ 的平台",
+        "hint": "可多选。留空时所有平台默认按 QQ 处理；选择后只有选中的平台按 QQ 处理，其他平台使用 QQ 中转群。",
+        "type": "list",
+        "default": []
+      },
+      "relay_group": {
+        "description": "QQ 中转群",
+        "hint": "QQ 群聊无需填写，直接使用当前群；QQ 私聊和其他平台必须填写。",
+        "type": "string",
+        "default": ""
+      },
+      "default_role": {
+        "description": "默认声聊角色",
+        "hint": "全局默认角色。QQ 群内可用“声聊角色 序号/名字”单独覆盖。",
+        "type": "string",
+        "default": "lucy-voice-f36",
+        "options": [
+          "lucy-voice-laibixiaoxin",
+          "lucy-voice-houge",
+          "lucy-voice-silang",
+          "lucy-voice-guangdong-f1",
+          "lucy-voice-guangxi-m1",
+          "lucy-voice-daji",
+          "lucy-voice-lizeyan",
+          "lucy-voice-suxinjiejie",
+          "lucy-voice-m8",
+          "lucy-voice-male1",
+          "lucy-voice-male3",
+          "lucy-voice-lvbu",
+          "lucy-voice-xueling",
+          "lucy-voice-f37",
+          "lucy-voice-male2",
+          "lucy-voice-female1",
+          "lucy-voice-m14",
+          "lucy-voice-f38",
+          "lucy-voice-m101",
+          "lucy-voice-female2",
+          "lucy-voice-f36",
+          "lucy-voice-f34"
+        ],
+        "labels": [
+          "小新",
+          "猴哥",
+          "四郎",
+          "东北老妹儿",
+          "广西大表哥",
+          "妲己",
+          "霸道总裁",
+          "酥心御姐",
+          "说书先生",
+          "憨憨小弟",
+          "憨厚老哥",
+          "吕布",
+          "元气少女",
+          "文艺少女",
+          "磁性大叔",
+          "邻家小妹",
+          "低沉男声",
+          "傲娇少女",
+          "爹系男友",
+          "暖心姐姐",
+          "温柔妹妹",
+          "书香少女"
+        ]
+      },
+      "audio_format": {
+        "description": "音频输出格式",
+        "hint": "silk=直接使用 QQ 原始语音；wav/mp3 需要本地转换。QQ 群聊直用当前群时不会二次转换。",
+        "type": "string",
+        "default": "wav",
+        "options": [
+          "silk",
+          "wav",
+          "mp3"
+        ]
+      }
+    }
+  },
+  "output_settings": {
+    "description": "输出设置",
+    "type": "object",
+    "items": {
+      "probability": {
+        "description": "自动 TTS 触发概率",
+        "hint": "0=不触发，1=每次都尝试触发。",
+        "type": "float",
+        "default": 0.1,
+        "slider": {
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        }
+      },
+      "auto_tts": {
+        "description": "自动 TTS",
+        "hint": "拦截 LLM 回复并尝试生成语音。",
+        "type": "bool",
+        "default": true
+      },
+      "send_text_with_tts": {
+        "description": "TTS 输出时同步发送文字",
+        "hint": "开启时保留原文本并附加语音；关闭时尽量只发送语音。",
+        "type": "bool",
+        "default": false
+      },
+      "send_text_async": {
+        "description": "文字异步发送",
+        "hint": "开启时先发送文字，语音后台合成后补发；关闭时等待语音完成一起发送。",
+        "type": "bool",
+        "default": false
+      },
+      "min_text_length": {
+        "description": "最小文本长度",
+        "hint": "低于此字数不触发自动 TTS。",
+        "type": "int",
+        "default": 5
+      },
+      "max_text_length": {
+        "description": "最大文本长度",
+        "hint": "超过此字数不触发自动 TTS。",
+        "type": "int",
+        "default": 500
+      }
+    }
+  },
+  "segmentation": {
+    "description": "文本分段",
+    "type": "object",
+    "items": {
+      "enable_segmentation": {
+        "description": "启用文本分段 TTS",
+        "hint": "长文本按规则切成多段，分别生成语音。",
+        "type": "bool",
+        "default": false
+      },
+      "segment_pattern": {
+        "description": "分段规则",
+        "hint": "sentence=句末标点，paragraph=空行，comma=逗号分号，mixed=混合。",
+        "type": "string",
+        "default": "sentence",
+        "options": [
+          "sentence",
+          "paragraph",
+          "comma",
+          "mixed"
+        ]
+      },
+      "segment_max_count": {
+        "description": "分段数量上限",
+        "hint": "超过此数量的分段会被合并；0=不限制。",
+        "type": "int",
+        "default": 10
+      },
+      "segment_voice_probability": {
+        "description": "分段语音输出概率",
+        "hint": "全局触发通过后生效；1.0=全部语音，0.0=全部文字。",
+        "type": "float",
+        "default": 1.0,
+        "slider": {
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.1
+        }
+      },
+      "segment_text_fallback": {
+        "description": "无语音段落文字兜底",
+        "hint": "未命中语音或合成失败时发送纯文字，避免内容丢失。",
+        "type": "bool",
+        "default": true
+      }
+    }
+  },
+  "voice_polish": {
+    "description": "口播润色（LLM）",
+    "type": "object",
+    "items": {
+      "enable_voice_polish": {
+        "description": "启用 LLM 口播润色",
+        "hint": "生成语音前调用 LLM，把文本改写成适合日常说出口的中文口播稿。",
+        "type": "bool",
+        "default": true
+      },
+      "display_polished_text": {
+        "description": "展示文字用润色后文本",
+        "hint": "开启后展示文本与语音内容一致，代价是文字需等待润色。",
+        "type": "bool",
+        "default": false
+      },
+      "polish_llm_provider": {
+        "description": "润色 LLM Provider",
+        "hint": "留空则使用当前对话模型；建议选择轻量快速模型。",
+        "type": "string",
+        "default": ""
+      },
+      "polish_prompt": {
+        "description": "润色提示词",
+        "hint": "使用 {text} 作为原文占位符。不要添加 QQ/微信无法识别的音频标签。",
+        "type": "text",
+        "default": "你是一个中文口语化改写助手。把下面的机器人回复改写成日常聊天时会说出口的话，保持原意、事实、数字和专有名词不变，可以调整语序，但不要新增或删减信息。只输出改写后的纯文本，不要解释。\n\n原文：{text}"
+      }
+    }
+  },
+  "advanced": {
+    "description": "高级设置",
+    "type": "object",
+    "items": {
+      "timeout": {
+        "description": "QQ 请求超时（秒）",
+        "hint": "获取角色、生成语音和下载音频共用此超时。",
+        "type": "int",
+        "default": 30
+      },
+      "max_retries": {
+        "description": "失败重试次数",
+        "hint": "直接调用失败后，重试和回退中继群的总次数。",
+        "type": "int",
+        "default": 1
+      },
+      "max_concurrency": {
+        "description": "最大并发合成数",
+        "hint": "限制同时请求 QQ 声聊的数量，避免触发风控。",
+        "type": "int",
+        "default": 2
+      },
+      "cache_ttl": {
+        "description": "音频缓存时长（秒）",
+        "hint": "0=不缓存。缓存的是音频字节，不是 QQ URL。",
+        "type": "int",
+        "default": 86400
+      },
+      "max_cache_mb": {
+        "description": "音频缓存上限（MB）",
+        "hint": "超过后按修改时间清理最旧文件。",
+        "type": "int",
+        "default": 200
+      },
+      "ffmpeg_path": {
+        "description": "FFmpeg 路径",
+        "hint": "用于 WAV/MP3 转换；保留 ffmpeg 表示使用 PATH。",
+        "type": "string",
+        "default": "ffmpeg"
+      },
+      "debug_log": {
+        "description": "启用详细日志",
+        "hint": "记录请求路由、角色解析和转换结果，不记录密钥。",
+        "type": "bool",
+        "default": false
+      }
+    }
+  }
+}
+
