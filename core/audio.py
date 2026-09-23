@@ -173,37 +173,44 @@ class AudioConverter:
 
     @staticmethod
     def _silk_to_wav(data: bytes) -> bytes:
-        from pilk import silk_to_wav
+        import io
 
-        with tempfile.TemporaryDirectory(prefix="qq_aivoice_") as tmp:
-            silk_path = Path(tmp) / "input.silk"
-            wav_path = Path(tmp) / "output.wav"
-            silk_path.write_bytes(data)
-            silk_to_wav(str(silk_path), str(wav_path), rate=24000)
-            return wav_path.read_bytes()
+        import pysilk
+
+        pcm = io.BytesIO()
+        pysilk.decode(io.BytesIO(data), pcm, sample_rate=24000)
+        out = io.BytesIO()
+        with wave.open(out, "wb") as wav:
+            wav.setparams((1, 2, 24000, 0, "NONE", "NONE"))
+            wav.writeframes(pcm.getvalue())
+        return out.getvalue()
 
     @staticmethod
     def _wav_to_silk(data: bytes) -> bytes:
-        from pilk import SilkEncoder
+        import io
 
-        with tempfile.TemporaryDirectory(prefix="qq_aivoice_") as tmp:
-            wav_path = Path(tmp) / "input.wav"
-            silk_path = Path(tmp) / "output.silk"
-            wav_path.write_bytes(data)
-            with wave.open(str(wav_path), "rb") as wav:
+        import pysilk
+
+        with wave.open(io.BytesIO(data), "rb") as wav:
+            rate = wav.getframerate()
+            channels = wav.getnchannels()
+            width = wav.getsampwidth()
+            frames = wav.readframes(wav.getnframes())
+        if channels != 1 or width != 2 or rate not in {8000, 12000, 16000, 24000}:
+            data = AudioConverter._normalize_wav(data)
+            with wave.open(io.BytesIO(data), "rb") as wav:
                 rate = wav.getframerate()
-                channels = wav.getnchannels()
-                width = wav.getsampwidth()
-            if channels != 1 or width != 2:
-                data = AudioConverter._normalize_wav(data)
-                wav_path.write_bytes(data)
-                with wave.open(str(wav_path), "rb") as wav:
-                    rate = wav.getframerate()
-            encoder = SilkEncoder(pcm_rate=rate if rate in {
-                8000, 12000, 16000, 24000, 32000, 44100, 48000
-            } else 24000)
-            encoder.encode(str(wav_path), str(silk_path), tencent=True)
-            return silk_path.read_bytes()
+                frames = wav.readframes(wav.getnframes())
+        out = io.BytesIO()
+        pysilk.encode(
+            io.BytesIO(frames),
+            out,
+            sample_rate=rate,
+            bit_rate=24000,
+            max_internal_sample_rate=min(rate, 24000),
+            tencent=True,
+        )
+        return out.getvalue()
 
     @staticmethod
     def _normalize_wav(data: bytes) -> bytes:
