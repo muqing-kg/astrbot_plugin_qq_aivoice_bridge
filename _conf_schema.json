@@ -5,13 +5,13 @@
     "items": {
       "enabled": {
         "description": "启用 QQ 声聊 TTS",
-        "hint": "总开关。关闭后插件不自动生成语音，也不执行后续处理。",
+        "hint": "总开关。关闭后插件完全不工作，“声聊角色”命令也会停用。",
         "type": "bool",
         "default": true
       },
       "qq_platforms": {
         "description": "识别为 QQ 的平台",
-        "hint": "可多选。留空时所有平台默认按 QQ 处理；选择后只有选中的平台按 QQ 处理，其他平台使用 QQ 中转群。",
+        "hint": "填 AstrBot 平台实例的 ID（在平台的配置里能看到），可填多个。留空时所有平台都按 QQ 处理；一旦填写，只有列出的平台按 QQ 处理，其余平台走 QQ 中转群。",
         "type": "list",
         "default": []
       },
@@ -105,7 +105,7 @@
       },
       "auto_tts": {
         "description": "自动 TTS",
-        "hint": "拦截 LLM 回复并尝试生成语音。",
+        "hint": "拦截 LLM 回复并自动生成语音。关闭后只保留“声聊角色”命令，不会自动发语音。",
         "type": "bool",
         "default": true
       },

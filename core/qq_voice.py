@@ -15,6 +15,11 @@ except ImportError:
     logger = logging.getLogger("astrbot")
 
 from .roles import Role, normalize_roles
+from .text_utils import brief_error
+
+# A QQ voice clip is a few tens of KB; anything past this is not audio and is
+# not worth holding in memory.
+MAX_AUDIO_BYTES = 8 * 1024 * 1024
 
 
 def platform_meta(instance):
@@ -38,7 +43,6 @@ def platform_meta(instance):
 class QQAdapter:
     adapter: object
     platform_id: str
-    name: str
 
     @property
     def bot(self):
@@ -77,7 +81,6 @@ class QQVoiceClient:
                 QQAdapter(
                     adapter=inst,
                     platform_id=str(getattr(metadata, "id", "")),
-                    name=str(getattr(metadata, "id", "") or getattr(metadata, "name", "")),
                 )
             )
         return result
@@ -104,7 +107,10 @@ class QQVoiceClient:
                 last_error = e
                 if attempt < attempts:
                     logger.warning(
-                        "[QQ声聊] %s失败，第 %d 次重试：%s", label, attempt, e
+                        "[QQ声聊] %s失败，第 %d 次重试：%s",
+                        label,
+                        attempt,
+                        brief_error(e),
                     )
                     await asyncio.sleep(min(attempt, 3) * 0.5)
         raise last_error if last_error else RuntimeError(f"{label} failed")
@@ -206,7 +212,15 @@ class QQVoiceClient:
             self._session = aiohttp.ClientSession(timeout=timeout)
         async with self._session.get(url) as resp:
             resp.raise_for_status()
-            data = await resp.read()
+            declared = resp.content_length
+            if declared and declared > MAX_AUDIO_BYTES:
+                raise RuntimeError(f"audio payload too large: {declared} bytes")
+            chunks = bytearray()
+            async for chunk in resp.content.iter_chunked(65536):
+                chunks.extend(chunk)
+                if len(chunks) > MAX_AUDIO_BYTES:
+                    raise RuntimeError("audio payload exceeds the size limit")
+            data = bytes(chunks)
             content_type = str(resp.headers.get("Content-Type") or "")
         kind = content_type.split(";", 1)[0].strip().lower()
         if kind and not kind.startswith(

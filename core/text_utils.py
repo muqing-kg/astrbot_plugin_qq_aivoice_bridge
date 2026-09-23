@@ -17,6 +17,18 @@ except ImportError:
 _MD_SYMBOLS_RE = re.compile(r"\*+|`+|~~|__")
 _MD_HEADING_RE = re.compile(r"(?m)^\s{0,3}#{1,6}\s+")
 
+ERROR_PREVIEW_LIMIT = 200
+
+
+def brief_error(error: BaseException, limit: int = ERROR_PREVIEW_LIMIT) -> str:
+    """Collapse an exception into one short log line.
+
+    Platform adapters and ffmpeg wrappers can raise with a whole banner
+    attached, which would bury every other line in the log.
+    """
+    text = " ".join(str(error).split())
+    return text if len(text) <= limit else text[:limit] + "…"
+
 
 def strip_markdown(text: str) -> str:
     if not text:

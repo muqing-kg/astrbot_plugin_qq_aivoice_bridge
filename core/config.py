@@ -44,7 +44,6 @@ class ConfigManager:
     def __init__(self, raw: dict | None):
         self._raw = raw or {}
         self._flat: dict[str, Any] = {}
-        self._paths: dict[str, tuple[str, ...]] = {}
         self._flatten(self._raw)
         for key, value in self._DEFAULTS.items():
             self._flat.setdefault(key, self._copy(value))
@@ -57,28 +56,15 @@ class ConfigManager:
             return dict(value)
         return value
 
-    def _flatten(self, src: dict, path: tuple[str, ...] = ()) -> None:
+    def _flatten(self, src: dict) -> None:
         for key, value in src.items():
-            current = path + (key,)
             if isinstance(value, dict):
-                self._flatten(value, current)
+                self._flatten(value)
                 continue
             self._flat[key] = value
-            if len(current) > 1:
-                self._paths[key] = current
 
     def get(self, key: str, default=None):
         return self._flat.get(key, default)
-
-    def set(self, key: str, value) -> None:
-        self._flat[key] = value
-        path = self._paths.get(key)
-        if not path:
-            return
-        node = self._raw
-        for part in path[:-1]:
-            node = node.setdefault(part, {})
-        node[path[-1]] = value
 
     @property
     def enabled(self) -> bool:

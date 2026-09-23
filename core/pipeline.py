@@ -25,20 +25,9 @@ from .segmentation import (
     resolve_delivery,
     split_text,
 )
-from .text_utils import extract_plain_text, should_skip
+from .text_utils import brief_error, extract_plain_text, should_skip
 
 ROLE_CACHE_TTL = 3600
-ERROR_PREVIEW_LIMIT = 200
-
-
-def _brief(error: BaseException, limit: int = ERROR_PREVIEW_LIMIT) -> str:
-    """Collapse an exception into one short log line.
-
-    Platform adapters can raise with a whole ffmpeg banner attached; the raw
-    message would bury everything else in the log.
-    """
-    text = " ".join(str(error).split())
-    return text if len(text) <= limit else text[:limit] + "…"
 
 
 class VoicePipeline:
@@ -49,6 +38,16 @@ class VoicePipeline:
         self.converter = converter
         self.cache = VoiceCache()
         self._semaphore = asyncio.Semaphore(self.config.max_concurrency)
+        self._pending_tasks: set[asyncio.Task] = set()
+
+    def _track(self, task: asyncio.Task) -> None:
+        """Hold a strong reference so a pending send is not garbage collected.
+
+        ``asyncio`` only keeps weak references to tasks, so a fire-and-forget
+        send can be collected before it finishes.
+        """
+        self._pending_tasks.add(task)
+        task.add_done_callback(self._pending_tasks.discard)
 
     def _platform_kind(self, event) -> str:
         """Classify the message source without assuming which platform it is."""
@@ -147,7 +146,16 @@ class VoicePipeline:
                 text_part = ""
             logger.info("[QQ声聊] 发送形式：先发文字，语音后台补发")
             # The background task owns the temp file and deletes it when done.
-            asyncio.create_task(self._send_audio_later(event, path, text_part))
+            self._track(
+                asyncio.create_task(
+                    self._send_audio_later(
+                        event,
+                        path,
+                        text_part,
+                        "" if text_sent else display_text,
+                    )
+                )
+            )
         else:
             logger.info("[QQ声聊] 发送形式：本地合成语音消息")
             try:
@@ -171,13 +179,20 @@ class VoicePipeline:
             min_length=cfg.min_text_length,
             probability=cfg.segment_voice_probability,
         )
+        # The text shown in chat can differ from the text being spoken (polish
+        # may be hidden), so it is split by the same rule and paired by index.
+        display_segments = (
+            segments
+            if display_text == text
+            else split_text(display_text, cfg.segment_pattern, cfg.segment_max_count)
+        )
         roles = await self._roles_for_route(route)
         role = self._pick_role(event, route, roles)
 
         logger.info("[QQ声聊] 文本分为 %d 段，逐段生成语音", len(plans))
         voice_count = 0
         text_count = 0
-        for plan in plans:
+        for index, plan in enumerate(plans):
             if plan.blank:
                 continue
             delivery = resolve_delivery(
@@ -187,7 +202,7 @@ class VoicePipeline:
                 text_async=cfg.send_text_async,
                 fallback_enabled=cfg.segment_text_fallback,
             )
-            shown = display_text if len(plans) == 1 else plan.text
+            shown = display_segments[index] if index < len(display_segments) else ""
             if delivery == TEXT_FALLBACK:
                 text_count += await self._send_text_if(event, shown, True)
                 continue
@@ -198,24 +213,34 @@ class VoicePipeline:
                     event, shown, cfg.segment_text_fallback
                 )
                 continue
-            if delivery == TEXT_FIRST:
-                text_count += await self._send_text_if(event, shown, True)
+
+            # Remember whether this segment's text already went out, so a later
+            # failure does not repeat it.
+            sent = await self._send_text_if(event, shown, delivery == TEXT_FIRST)
+            text_count += sent
+            text_sent = bool(sent)
 
             if route.native:
                 bundled = delivery == BUNDLED and cfg.send_text_with_tts
-                text_count += await self._send_text_if(event, shown, bundled)
+                extra = await self._send_text_if(event, shown, bundled)
+                text_count += extra
+                text_sent = text_sent or bool(extra)
                 ok = await self._native_generate(route, role, plan.text)
                 if ok:
                     voice_count += 1
                 text_count += await self._send_text_if(
-                    event, shown, not ok and cfg.segment_text_fallback
+                    event,
+                    shown,
+                    not ok and not text_sent and cfg.segment_text_fallback,
                 )
                 continue
 
             path = await self._generate_file(route, role, plan.text)
             if path is None:
                 text_count += await self._send_text_if(
-                    event, shown, cfg.segment_text_fallback
+                    event,
+                    shown,
+                    not text_sent and cfg.segment_text_fallback,
                 )
                 continue
             text_part = "" if delivery in {VOICE_ONLY, TEXT_FIRST} else shown
@@ -223,7 +248,12 @@ class VoicePipeline:
                 await self._send_audio(event, path, text_part)
                 voice_count += 1
             except Exception as e:  # noqa: BLE001
-                logger.warning("[QQ声聊] 分段语音发送失败：%s", _brief(e))
+                logger.warning("[QQ声聊] 分段语音发送失败：%s", brief_error(e))
+                text_count += await self._send_text_if(
+                    event,
+                    shown,
+                    not text_sent and cfg.segment_text_fallback,
+                )
             finally:
                 self._discard(path)
 
@@ -282,7 +312,7 @@ class VoicePipeline:
             logger.info("[QQ声聊] QQ 声聊已生成语音")
             return True
         except Exception as e:  # noqa: BLE001
-            logger.warning("[QQ声聊] QQ 声聊生成失败：%s", _brief(e))
+            logger.warning("[QQ声聊] QQ 声聊生成失败：%s", brief_error(e))
             return False
 
     async def _generate_file(self, route: QQRoute, role: Role, text: str) -> Path | None:
@@ -332,7 +362,7 @@ class VoicePipeline:
             )
             return path
         except Exception as e:  # noqa: BLE001
-            logger.warning("[QQ声聊] 语音合成失败：%s", _brief(e))
+            logger.warning("[QQ声聊] 语音合成失败：%s", brief_error(e))
             return None
 
     def _write_temp(self, data: bytes, fmt: str) -> Path:
@@ -347,11 +377,20 @@ class VoicePipeline:
         except OSError:
             pass
 
-    async def _send_audio_later(self, event, path: Path, text: str) -> None:
+    async def _send_audio_later(
+        self,
+        event,
+        path: Path,
+        text: str,
+        fallback_text: str = "",
+    ) -> None:
         try:
             await self._send_audio(event, path, text)
         except Exception as e:  # noqa: BLE001
-            logger.warning("[QQ声聊] 后台补发语音失败：%s", _brief(e))
+            logger.warning("[QQ声聊] 后台补发语音失败：%s", brief_error(e))
+            if fallback_text:
+                logger.info("[QQ声聊] 本条改发文字")
+                await self._safe_send_text(event, fallback_text)
         finally:
             self._discard(path)
 
@@ -365,7 +404,7 @@ class VoicePipeline:
             logger.info("[QQ声聊] 语音已发送")
             return
         except Exception as e:  # noqa: BLE001
-            logger.warning("[QQ声聊] 语音消息发送失败，改发音频文件：%s", _brief(e))
+            logger.warning("[QQ声聊] 语音消息发送失败，改发音频文件：%s", brief_error(e))
 
         file_chain = []
         if text:
@@ -384,7 +423,7 @@ class VoicePipeline:
             logger.info("[QQ声聊] 文字已发送")
             return True
         except Exception as e:  # noqa: BLE001
-            logger.warning("[QQ声聊] 文字发送失败：%s", _brief(e))
+            logger.warning("[QQ声聊] 文字发送失败：%s", brief_error(e))
             return False
 
     async def _send_text_if(self, event, text: str, enabled: bool) -> int:

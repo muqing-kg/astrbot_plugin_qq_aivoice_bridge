@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from astrbot.api import logger
@@ -15,13 +14,11 @@ from .core.pipeline import VoicePipeline
 from .core.qq_voice import QQVoiceClient
 from .core.state import StateStore
 from .handlers.commands import handle_role_command
-from .webapi import register_web_apis
 
 
 class QQAIVoiceBridgePlugin(Star):
     def __init__(self, context: Context, config: dict | None = None):
         super().__init__(context)
-        self._astrbot_config = config
         self.config = ConfigManager(config)
         self.data_dir = Path(StarTools.get_data_dir())
         self.state = StateStore(self.data_dir)
@@ -40,7 +37,6 @@ class QQAIVoiceBridgePlugin(Star):
         )
         self.qq = QQVoiceClient(context, self.config)
         self.pipeline = VoicePipeline(self, self.qq, self.converter)
-        register_web_apis(context, self)
 
     @filter.on_decorating_result()
     async def on_decorating_result(self, event):
@@ -53,21 +49,3 @@ class QQAIVoiceBridgePlugin(Star):
 
     async def terminate(self):
         await self.qq.close()
-
-    def save_config(self) -> None:
-        save = getattr(self._astrbot_config, "save_config", None)
-        if callable(save):
-            save()
-
-    @staticmethod
-    def _parse_cmd(event, cmd: str) -> str:
-        raw = str(event.message_str or "").strip()
-        base = cmd.lstrip("/")
-        match = re.match(
-            rf"^/?{re.escape(base)}(?:@[^\s]+)?(?:\s+|$)",
-            raw,
-            re.IGNORECASE,
-        )
-        if match:
-            return raw[match.end():].strip()
-        return raw[len(cmd):].strip()

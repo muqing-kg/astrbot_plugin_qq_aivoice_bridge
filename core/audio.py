@@ -41,7 +41,8 @@ def sniff_audio_format(data: bytes) -> str:
     if data.startswith(b"ID3"):
         return "mp3"
     if len(data) >= 2 and data[0] == 0xFF and (data[1] & 0xE0) == 0xE0:
-        return "mp3"
+        # MPEG audio sets the layer bits; ADTS (AAC) leaves them at zero.
+        return "aac" if (data[1] & 0x06) == 0 else "mp3"
     if data.startswith(b"OggS"):
         return "ogg"
     if data.startswith(b"fLaC"):
@@ -63,11 +64,14 @@ def is_silk(data: bytes) -> bool:
 def normalize_silk(data: bytes) -> bytes:
     """Rewrite the SILK marker to the canonical ``\\x02`` form.
 
-    pysilk rejects a ``\\x03`` marker outright, and ffmpeg cannot read SILK at
-    all, so every SILK payload is normalised before it is decoded or handed
-    downstream.
+    QQ prepends a single marker byte that is ``0x02`` in most builds and
+    ``0x03`` in others. pysilk rejects anything but ``0x02``, and ffmpeg cannot
+    read SILK at all, so whatever marker arrives is normalised before the
+    payload is decoded or handed downstream.
     """
-    if data[:1] == b"\x03" and data[1:10] == SILK_MAGIC:
+    if data[:1] == b"\x02":
+        return data
+    if data[:1] and data[1:10] == SILK_MAGIC:
         return b"\x02" + data[1:]
     return data
 

@@ -19,10 +19,3 @@ def test_empty_platforms_means_all_qq_and_clamps_probability():
     assert cfg.qq_platforms == []
     assert cfg.probability == 1.0
 
-
-def test_set_mutates_raw_nested_config():
-    raw = {"basic": {"qq_platforms": []}}
-    cfg = ConfigManager(raw)
-    cfg.set("qq_platforms", ["qq-main"])
-    assert raw["basic"]["qq_platforms"] == ["qq-main"]
-

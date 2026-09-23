@@ -2,14 +2,27 @@
 
 from __future__ import annotations
 
+import re
+
 from astrbot.api import logger
 
 from ..core.roles import format_role_list, resolve_role
 
 RESET_WORDS = {"重置", "默认", "清除", "跟随全局", "reset", "default"}
+COMMAND = "声聊角色"
+
+
+def parse_command_arg(message: str, cmd: str = COMMAND) -> str:
+    """Return whatever follows ``cmd`` in the raw command text."""
+    raw = str(message or "").strip()
+    match = re.match(rf"^/?{re.escape(cmd)}(?:@[^\s]+)?\s*", raw, re.IGNORECASE)
+    return raw[match.end():].strip() if match else ""
 
 
 async def handle_role_command(plugin, event) -> str:
+    if not plugin.config.enabled:
+        return "插件已停用，请先在插件配置里打开总开关。"
+
     native = await plugin.pipeline.native_group_roles(event)
     if native is None:
         return "该命令仅支持 QQ 群聊。"
@@ -20,7 +33,7 @@ async def handle_role_command(plugin, event) -> str:
         logger.info("[QQ声聊] 群 %s 没有可用的声聊角色", group_id)
         return "当前 QQ 群没有可用的声聊角色。"
 
-    arg = plugin._parse_cmd(event, "声聊角色").strip()
+    arg = parse_command_arg(event.message_str)
 
     if not arg:
         logger.info("[QQ声聊] 群 %s 查询声聊角色，共 %d 个", group_id, len(roles))
