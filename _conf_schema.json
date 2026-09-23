@@ -6,6 +6,7 @@
       "enabled": {
         "description": "启用 QQ 声聊 TTS",
         "hint": "总开关。关闭后插件完全不工作，“声聊角色”命令也会停用。",
+        "obvious_hint": true,
         "type": "bool",
         "default": true
       },
@@ -17,7 +18,8 @@
       },
       "relay_group": {
         "description": "QQ 中转群",
-        "hint": "QQ 群聊无需填写，直接使用当前群；QQ 私聊和其他平台必须填写。",
+        "hint": "QQ 群聊无需填写，直接使用当前群；QQ 私聊和其他平台必须填写。语音会真实发送到这个群且无法撤回，建议使用专用群。",
+        "obvious_hint": true,
         "type": "string",
         "default": ""
       },
@@ -117,13 +119,13 @@
       },
       "send_text_async": {
         "description": "文字异步发送",
-        "hint": "开启时先发送文字，语音后台合成后补发；关闭时等待语音完成一起发送。",
+        "hint": "开启时先发送文字，语音后台合成后补发；关闭时等待语音完成一起发送。若关闭“TTS 输出时同步发送文字”，则没有文字可先发，此项只决定语音是否后台补发。",
         "type": "bool",
         "default": false
       },
       "min_text_length": {
         "description": "最小文本长度",
-        "hint": "低于此字数不触发自动 TTS。",
+        "hint": "低于此字数不触发自动 TTS。启用文本分段时，此值同时是“短段”阈值，短段始终以文字发送。",
         "type": "int",
         "default": 5
       },
@@ -165,7 +167,7 @@
       },
       "segment_voice_probability": {
         "description": "分段语音输出概率",
-        "hint": "全局触发通过后生效；1.0=全部语音，0.0=全部文字。",
+        "hint": "全局触发通过后生效；1.0=全部语音，0.0=全部走文字兜底（需开启“无语音段落文字兜底”，否则未命中的段不发送）。",
         "type": "float",
         "default": 1.0,
         "slider": {
@@ -176,7 +178,8 @@
       },
       "segment_text_fallback": {
         "description": "无语音段落文字兜底",
-        "hint": "未命中语音或合成失败时发送纯文字，避免内容丢失。",
+        "hint": "未命中语音或合成失败时发送纯文字，避免内容丢失。短于最小文本长度的分段始终以文字发送，不受此开关影响；关闭后，未命中语音的长段会被整段丢弃。",
+        "obvious_hint": true,
         "type": "bool",
         "default": true
       }

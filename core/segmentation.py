@@ -68,7 +68,11 @@ def resolve_delivery(
 ) -> str:
     if blank:
         return DROP
-    if short or not want_voice:
+    if short:
+        # A segment below the minimum length can never be spoken, so it always
+        # goes out as text; otherwise its wording vanishes from the reply.
+        return TEXT_FALLBACK
+    if not want_voice:
         return TEXT_FALLBACK if fallback_enabled else DROP
     if not text_enabled:
         return VOICE_ONLY

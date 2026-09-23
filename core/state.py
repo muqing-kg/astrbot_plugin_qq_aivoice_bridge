@@ -14,6 +14,8 @@ from pathlib import Path
 
 from .roles import Role
 
+ROLE_CACHE_MAX_ENTRIES = 64
+
 
 class StateStore:
     def __init__(self, data_dir: Path):
@@ -81,3 +83,8 @@ class StateStore:
 
     def set_cached_roles(self, platform_id: str, group_id: str, roles: list[Role]) -> None:
         self._role_cache[(str(platform_id), str(group_id))] = (time.time(), list(roles))
+        # ponytail: cheapest bounded cache is evicting the oldest write; swap in
+        # an LRU only if hit rate on a busy multi-group deployment matters.
+        while len(self._role_cache) > ROLE_CACHE_MAX_ENTRIES:
+            oldest = min(self._role_cache, key=lambda key: self._role_cache[key][0])
+            self._role_cache.pop(oldest, None)

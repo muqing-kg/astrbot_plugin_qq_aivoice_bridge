@@ -142,3 +142,15 @@ def test_with_retries_applies_timeout():
         pass
     else:
         raise AssertionError("expected TimeoutError")
+
+
+def test_download_rejects_a_non_http_url():
+    """The URL comes from the QQ side, so only http(s) may be fetched."""
+    client = QQVoiceClient(FakeContext([]), FakeConfig([], max_retries=0))
+    for url in ("file:///etc/passwd", "data:text/plain,hi", ""):
+        try:
+            asyncio.run(client.download(url))
+        except RuntimeError as exc:
+            assert "URL" in str(exc)
+        else:
+            raise AssertionError("expected RuntimeError")

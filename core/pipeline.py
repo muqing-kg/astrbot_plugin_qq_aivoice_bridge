@@ -29,6 +29,10 @@ from .text_utils import brief_error, extract_plain_text, should_skip
 
 ROLE_CACHE_TTL = 3600
 
+# A background send owns a temp file and the reply it carries, so it is given a
+# moment to finish before the plugin stops.
+SHUTDOWN_GRACE = 5.0
+
 
 class VoicePipeline:
     def __init__(self, plugin, qq: QQVoiceClient, converter: AudioConverter):
@@ -48,6 +52,17 @@ class VoicePipeline:
         """
         self._pending_tasks.add(task)
         task.add_done_callback(self._pending_tasks.discard)
+
+    async def shutdown(self, grace: float = SHUTDOWN_GRACE) -> None:
+        """Let pending background sends finish, then cancel the stragglers."""
+        pending = list(self._pending_tasks)
+        if not pending:
+            return
+        _, unfinished = await asyncio.wait(pending, timeout=grace)
+        for task in unfinished:
+            task.cancel()
+        if unfinished:
+            await asyncio.gather(*unfinished, return_exceptions=True)
 
     def _platform_kind(self, event) -> str:
         """Classify the message source without assuming which platform it is."""
@@ -143,6 +158,9 @@ class VoicePipeline:
         if self.config.send_text_async:
             if include_text and not text_sent:
                 text_sent = await self._safe_send_text(event, display_text)
+            if text_sent:
+                # The text already went out, so the background send must not
+                # repeat it alongside the voice.
                 text_part = ""
             logger.info("[QQ声聊] 发送形式：先发文字，语音后台补发")
             # The background task owns the temp file and deletes it when done.
@@ -160,6 +178,12 @@ class VoicePipeline:
             logger.info("[QQ声聊] 发送形式：本地合成语音消息")
             try:
                 await self._send_audio(event, path, text_part)
+            except Exception as e:  # noqa: BLE001
+                logger.warning(
+                    "[QQ声聊] 语音消息发送失败，本条改发文字：%s", brief_error(e)
+                )
+                if not text_sent:
+                    await self._safe_send_text(event, display_text)
             finally:
                 self._discard(path)
         result.chain = []
@@ -192,6 +216,22 @@ class VoicePipeline:
         logger.info("[QQ声聊] 文本分为 %d 段，逐段生成语音", len(plans))
         voice_count = 0
         text_count = 0
+        text_shown = False
+        if len(display_segments) != len(plans):
+            # Polishing rewrote the sentence count, so segments can no longer be
+            # matched to the original wording one by one. Show the original text
+            # once and keep the segments voice-only instead of misaligning them.
+            logger.info(
+                "[QQ声聊] 展示文本 %d 段与语音 %d 段不一致，改为整段展示原文",
+                len(display_segments),
+                len(plans),
+            )
+            sent = await self._send_text_if(
+                event, display_text, cfg.send_text_with_tts
+            )
+            text_count += sent
+            text_shown = bool(sent)
+            display_segments = [""] * len(plans)
         for index, plan in enumerate(plans):
             if plan.blank:
                 continue
@@ -203,15 +243,20 @@ class VoicePipeline:
                 fallback_enabled=cfg.segment_text_fallback,
             )
             shown = display_segments[index] if index < len(display_segments) else ""
+            # Text-only deliveries (short segment, no role, failed synthesis)
+            # still have to say something, so they fall back to the spoken
+            # wording unless the whole text already went out above.
+            text_only = "" if text_shown else (shown or plan.text)
             if delivery == TEXT_FALLBACK:
-                text_count += await self._send_text_if(event, shown, True)
+                text_count += await self._send_text_if(event, text_only, True)
                 continue
             if delivery == DROP:
                 continue
             if role is None:
-                text_count += await self._send_text_if(
-                    event, shown, cfg.segment_text_fallback
-                )
+                # Without a role nothing can be spoken, so the reply falls back
+                # to text regardless of the fallback switch, matching the
+                # single-segment path instead of vanishing.
+                text_count += await self._send_text_if(event, text_only, True)
                 continue
 
             # Remember whether this segment's text already went out, so a later
@@ -230,7 +275,7 @@ class VoicePipeline:
                     voice_count += 1
                 text_count += await self._send_text_if(
                     event,
-                    shown,
+                    text_only,
                     not ok and not text_sent and cfg.segment_text_fallback,
                 )
                 continue
@@ -239,11 +284,28 @@ class VoicePipeline:
             if path is None:
                 text_count += await self._send_text_if(
                     event,
-                    shown,
+                    text_only,
                     not text_sent and cfg.segment_text_fallback,
                 )
                 continue
             text_part = "" if delivery in {VOICE_ONLY, TEXT_FIRST} else shown
+            if delivery == TEXT_FIRST:
+                # This segment's text is already out, so the voice may be
+                # generated and sent in the background. The task owns the temp
+                # file from here on, so this branch must not discard it.
+                logger.info("[QQ声聊] 分段发送形式：先发文字，语音后台补发")
+                self._track(
+                    asyncio.create_task(
+                        self._send_audio_later(
+                            event,
+                            path,
+                            text_part,
+                            "" if text_sent else text_only,
+                        )
+                    )
+                )
+                voice_count += 1
+                continue
             try:
                 await self._send_audio(event, path, text_part)
                 voice_count += 1
@@ -251,7 +313,7 @@ class VoicePipeline:
                 logger.warning("[QQ声聊] 分段语音发送失败：%s", brief_error(e))
                 text_count += await self._send_text_if(
                     event,
-                    shown,
+                    text_only,
                     not text_sent and cfg.segment_text_fallback,
                 )
             finally:

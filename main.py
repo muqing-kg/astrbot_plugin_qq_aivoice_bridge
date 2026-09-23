@@ -48,4 +48,5 @@ class QQAIVoiceBridgePlugin(Star):
         yield event.plain_result(await handle_role_command(self, event))
 
     async def terminate(self):
+        await self.pipeline.shutdown()
         await self.qq.close()

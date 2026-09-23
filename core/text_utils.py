@@ -2,17 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 import re
 
-try:
-    from astrbot.api import logger
-    from astrbot.api.message_components import Plain, Record
-except ImportError:
-    logger = logging.getLogger("astrbot")
-    Plain = type("Plain", (), {"__init__": lambda self, text="": setattr(self, "text", text)})
-    Record = type("Record", (), {})
-
+from astrbot.api.message_components import Plain, Record
 
 _MD_SYMBOLS_RE = re.compile(r"\*+|`+|~~|__")
 _MD_HEADING_RE = re.compile(r"(?m)^\s{0,3}#{1,6}\s+")

@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
-from .roles import BUILTIN_ROLES
-
 DEFAULT_POLISH_PROMPT = (
     "你是一个中文口语化改写助手。把下面的机器人回复改写成日常聊天时会说出口的话，"
     "保持原意、事实、数字和专有名词不变，可以调整语序，但不要新增或删减信息。"
     "只输出改写后的纯文本，不要解释。\n\n原文：{text}"
 )
+
+# The role a group follows when none is configured. Kept as a literal so that
+# reordering ``BUILTIN_ROLES`` cannot silently change the default.
+DEFAULT_ROLE_ID = "lucy-voice-f36"
 
 
 class ConfigManager:
@@ -18,7 +20,7 @@ class ConfigManager:
         "enabled": True,
         "qq_platforms": [],
         "relay_group": "",
-        "default_role": "lucy-voice-f36",
+        "default_role": DEFAULT_ROLE_ID,
         "audio_format": "wav",
         "probability": 0.1,
         "auto_tts": True,
@@ -88,7 +90,7 @@ class ConfigManager:
         value = str(self._flat.get("default_role", "") or "").strip()
         if value:
             return value
-        return BUILTIN_ROLES[-2].role_id
+        return DEFAULT_ROLE_ID
 
     @property
     def audio_format(self) -> str:

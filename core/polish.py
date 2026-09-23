@@ -2,12 +2,7 @@
 
 from __future__ import annotations
 
-try:
-    from astrbot.api import logger
-except ImportError:
-    import logging
-
-    logger = logging.getLogger("astrbot")
+from astrbot.api import logger
 
 from .config import DEFAULT_POLISH_PROMPT
 from .text_utils import sanitize_llm_output

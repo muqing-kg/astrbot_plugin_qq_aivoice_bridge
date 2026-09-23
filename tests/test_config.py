@@ -19,3 +19,9 @@ def test_empty_platforms_means_all_qq_and_clamps_probability():
     assert cfg.qq_platforms == []
     assert cfg.probability == 1.0
 
+
+def test_default_role_falls_back_to_a_literal_id():
+    """The fallback must not depend on the position inside BUILTIN_ROLES."""
+    assert ConfigManager({}).default_role == "lucy-voice-f36"
+    assert ConfigManager({"basic": {"default_role": "  "}}).default_role == "lucy-voice-f36"
+

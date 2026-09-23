@@ -1,4 +1,5 @@
 import asyncio
+import subprocess
 
 import pytest
 
@@ -117,4 +118,23 @@ def test_passthrough_silk_is_normalised(tmp_path):
     data, fmt = asyncio.run(converter.convert(payload, "silk", source_format="silk"))
     assert fmt == "silk"
     assert data[:10] == bytes.fromhex("02 23 21 53 49 4c 4b 5f 56 33")
+
+
+def test_ffmpeg_call_is_bounded(monkeypatch, tmp_path):
+    """A hung ffmpeg must not pin the worker thread and the temp dir forever."""
+    converter = AudioConverter(tmp_path / "temp", timeout=7.5)
+    payload = b"RIFF\x00\x00\x00\x00WAVEfmt "
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen.update(kwargs)
+        raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout"))
+
+    monkeypatch.setattr("core.audio.shutil.which", lambda _path: "ffmpeg")
+    monkeypatch.setattr("core.audio.subprocess.run", fake_run)
+
+    data, fmt = asyncio.run(converter.convert(payload, "mp3", source_format="wav"))
+
+    assert seen["timeout"] == 7.5
+    assert (data, fmt) == (payload, "wav")
 

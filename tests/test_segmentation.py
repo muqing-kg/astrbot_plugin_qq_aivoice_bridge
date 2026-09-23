@@ -63,3 +63,12 @@ def test_delivery_matrix():
         text_async=False,
         fallback_enabled=False,
     ) == DROP
+    # A segment below the minimum length can never be spoken, so turning the
+    # fallback off must not make its wording disappear from the reply.
+    assert resolve_delivery(
+        short=True,
+        want_voice=False,
+        text_enabled=True,
+        text_async=False,
+        fallback_enabled=False,
+    ) == TEXT_FALLBACK

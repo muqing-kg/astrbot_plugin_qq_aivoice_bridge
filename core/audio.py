@@ -12,13 +12,7 @@ import wave
 from collections import OrderedDict
 from pathlib import Path
 
-try:
-    from astrbot.api import logger
-except ImportError:
-    import logging
-
-    logger = logging.getLogger("astrbot")
-
+from astrbot.api import logger
 
 SUPPORTED_FORMATS = {"silk", "wav", "mp3"}
 
@@ -152,11 +146,23 @@ class VoiceCache:
             self._bytes -= len(item[0])
 
 
+# One conversion handles a few seconds of audio; anything longer is a hung
+# ffmpeg, and giving up frees the worker thread and the temp directory.
+FFMPEG_TIMEOUT = 60.0
+
+
 class AudioConverter:
-    def __init__(self, temp_dir: Path, *, ffmpeg_path: str = "ffmpeg"):
+    def __init__(
+        self,
+        temp_dir: Path,
+        *,
+        ffmpeg_path: str = "ffmpeg",
+        timeout: float = FFMPEG_TIMEOUT,
+    ):
         self.temp_dir = Path(temp_dir)
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         self.ffmpeg_path = ffmpeg_path or "ffmpeg"
+        self.timeout = max(1.0, float(timeout))
 
     def purge_temp_files(self) -> int:
         """Delete audio files left behind by a crash or an unclean shutdown."""
@@ -332,7 +338,12 @@ class AudioConverter:
             elif target == "mp3":
                 cmd += ["-ac", "1", "-ar", "24000", "-c:a", "libmp3lame", "-q:a", "5"]
             cmd.append(str(out_path))
-            proc = subprocess.run(cmd, capture_output=True, check=False)
+            proc = subprocess.run(
+                cmd,
+                capture_output=True,
+                check=False,
+                timeout=self.timeout,
+            )
             if proc.returncode != 0 or not out_path.exists():
                 raise RuntimeError(proc.stderr.decode("utf-8", errors="ignore")[:300])
             return out_path.read_bytes()

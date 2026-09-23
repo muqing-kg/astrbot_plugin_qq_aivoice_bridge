@@ -6,13 +6,7 @@ import asyncio
 from dataclasses import dataclass
 
 import aiohttp
-
-try:
-    from astrbot.api import logger
-except ImportError:
-    import logging
-
-    logger = logging.getLogger("astrbot")
+from astrbot.api import logger
 
 from .roles import Role, normalize_roles
 from .text_utils import brief_error
@@ -204,6 +198,8 @@ class QQVoiceClient:
         url = str(url or "").strip()
         if not url:
             raise RuntimeError("empty audio URL")
+        if not url.startswith(("http://", "https://")):
+            raise RuntimeError(f"unsupported audio URL scheme: {url[:32]}")
         return await self._with_retries("下载音频", lambda: self._download_once(url))
 
     async def _download_once(self, url: str) -> bytes:
