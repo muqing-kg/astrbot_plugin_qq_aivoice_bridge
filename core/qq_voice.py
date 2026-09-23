@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 
 import aiohttp
@@ -85,6 +86,29 @@ class QQVoiceClient:
         selected = set(self.config.qq_platforms)
         return not selected or str(platform_id) in selected
 
+    async def _with_retries(self, label: str, action):
+        """Run one QQ call with the configured timeout and retry budget.
+
+        Every QQ interaction goes through here, so ``timeout`` and
+        ``max_retries`` in the plugin config actually apply to role listing,
+        voice generation and audio download alike.
+        """
+        attempts = max(1, 1 + self.config.max_retries)
+        last_error: Exception | None = None
+        for attempt in range(1, attempts + 1):
+            try:
+                return await asyncio.wait_for(
+                    action(), timeout=self.config.timeout
+                )
+            except Exception as e:  # noqa: BLE001 - retried, then re-raised
+                last_error = e
+                if attempt < attempts:
+                    logger.warning(
+                        "[QQ声聊] %s失败，第 %d 次重试：%s", label, attempt, e
+                    )
+                    await asyncio.sleep(min(attempt, 3) * 0.5)
+        raise last_error if last_error else RuntimeError(f"{label} failed")
+
     def _adapter_by_id(self, platform_id: str) -> QQAdapter | None:
         for adapter in self.list_qq_adapters():
             if adapter.platform_id == str(platform_id):
@@ -135,10 +159,13 @@ class QQVoiceClient:
         )
 
     async def list_characters(self, bot, group_id: str) -> list[Role]:
-        raw = await bot.call_action(
-            "get_ai_characters",
-            group_id=str(group_id),
-            chat_type=1,
+        raw = await self._with_retries(
+            "获取声聊角色",
+            lambda: bot.call_action(
+                "get_ai_characters",
+                group_id=str(group_id),
+                chat_type=1,
+            ),
         )
         return normalize_roles(raw)
 
@@ -149,11 +176,14 @@ class QQVoiceClient:
         character_id: str,
         text: str,
     ) -> str:
-        result = await bot.call_action(
-            "get_ai_record",
-            group_id=str(group_id),
-            character=str(character_id),
-            text=str(text),
+        result = await self._with_retries(
+            "生成语音",
+            lambda: bot.call_action(
+                "get_ai_record",
+                group_id=str(group_id),
+                character=str(character_id),
+                text=str(text),
+            ),
         )
         if isinstance(result, dict):
             return str(
@@ -168,6 +198,9 @@ class QQVoiceClient:
         url = str(url or "").strip()
         if not url:
             raise RuntimeError("empty audio URL")
+        return await self._with_retries("下载音频", lambda: self._download_once(url))
+
+    async def _download_once(self, url: str) -> bytes:
         timeout = aiohttp.ClientTimeout(total=self.config.timeout)
         if self._session is None or self._session.closed:
             self._session = aiohttp.ClientSession(timeout=timeout)

@@ -39,7 +39,6 @@ class ConfigManager:
         "max_retries": 1,
         "max_concurrency": 2,
         "ffmpeg_path": "ffmpeg",
-        "debug_log": False,
     }
 
     def __init__(self, raw: dict | None):
@@ -186,10 +185,6 @@ class ConfigManager:
     @property
     def ffmpeg_path(self) -> str:
         return str(self._flat.get("ffmpeg_path", "ffmpeg") or "ffmpeg").strip()
-
-    @property
-    def debug_log(self) -> bool:
-        return bool(self._flat.get("debug_log", False))
 
     def _int(self, key: str, default: int) -> int:
         try:

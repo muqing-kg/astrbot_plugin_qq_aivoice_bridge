@@ -73,8 +73,6 @@ class VoicePipeline:
         )
         uid = event.unified_msg_origin
         text = await polish_text(self.plugin, original_text, uid)
-        if cfg.enable_voice_polish and text != original_text:
-            logger.info("[QQ声聊] 已完成口播润色")
         display_text = text if cfg.display_polished_text else original_text
 
         route = self.qq.resolve_route(event)
@@ -306,13 +304,12 @@ class VoicePipeline:
             converted, actual = await self.converter.convert(raw, fmt, source_format=source)
             self.cache.put(key, converted, actual)
             path = self._write_temp(converted, actual)
-            if self.config.debug_log:
-                logger.debug(
-                    "[QQ声聊] 合成细节：角色 %s，源格式 %s，输出格式 %s",
-                    role.role_id,
-                    source,
-                    actual,
-                )
+            logger.debug(
+                "[QQ声聊] 合成细节：角色 %s，源格式 %s，输出格式 %s",
+                role.role_id,
+                source,
+                actual,
+            )
             logger.info(
                 "[QQ声聊] 语音合成完成，耗时 %.1f 秒，音频 %.1f KB",
                 time.monotonic() - started,

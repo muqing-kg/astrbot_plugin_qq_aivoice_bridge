@@ -225,7 +225,7 @@
       },
       "max_retries": {
         "description": "失败重试次数",
-        "hint": "直接调用失败后，重试和回退中继群的总次数。",
+        "hint": "QQ 调用失败后的重试次数，覆盖获取角色、生成语音和下载音频。",
         "type": "int",
         "default": 1
       },
@@ -240,12 +240,6 @@
         "hint": "用于 WAV/MP3 转换；保留 ffmpeg 表示使用 PATH。",
         "type": "string",
         "default": "ffmpeg"
-      },
-      "debug_log": {
-        "description": "启用详细日志",
-        "hint": "记录请求路由、角色解析和转换结果，不记录密钥。",
-        "type": "bool",
-        "default": false
       }
     }
   }
