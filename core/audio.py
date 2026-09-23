@@ -22,6 +22,8 @@ except ImportError:
 
 SUPPORTED_FORMATS = {"silk", "wav", "mp3"}
 
+SILK_MAGIC = b"#!SILK_V3"
+
 # The cache lives in process memory only. Long-running deployments must not be
 # able to grow it without bound, so every dimension has a hard ceiling.
 VOICE_CACHE_MAX_ENTRIES = 128
@@ -32,7 +34,7 @@ VOICE_CACHE_TTL = 3600
 def sniff_audio_format(data: bytes) -> str:
     if not data:
         return "bin"
-    if data.startswith((b"\x02#!SILK_V3", b"#!SILK_V3")):
+    if is_silk(data):
         return "silk"
     if data.startswith(b"RIFF") and len(data) >= 12 and data[8:12] == b"WAVE":
         return "wav"
@@ -45,6 +47,29 @@ def sniff_audio_format(data: bytes) -> str:
     if data.startswith(b"fLaC"):
         return "flac"
     return "bin"
+
+
+def is_silk(data: bytes) -> bool:
+    """Detect a Tencent SILK payload.
+
+    QQ ships two header layouts for the same codec: ``\\x02#!SILK_V3`` and
+    ``\\x03#!SILK_V3``, plus a bare ``#!SILK_V3`` form.
+    """
+    if data.startswith(SILK_MAGIC):
+        return True
+    return len(data) >= 10 and data[1:10] == SILK_MAGIC
+
+
+def normalize_silk(data: bytes) -> bytes:
+    """Rewrite the SILK marker to the canonical ``\\x02`` form.
+
+    pysilk rejects a ``\\x03`` marker outright, and ffmpeg cannot read SILK at
+    all, so every SILK payload is normalised before it is decoded or handed
+    downstream.
+    """
+    if data[:1] == b"\x03" and data[1:10] == SILK_MAGIC:
+        return b"\x02" + data[1:]
+    return data
 
 
 def purge_legacy_cache_dir(data_dir: Path) -> bool:
@@ -157,7 +182,7 @@ class AudioConverter:
         if target not in SUPPORTED_FORMATS:
             target = "wav"
         if source == target:
-            return data, source
+            return (normalize_silk(data) if target == "silk" else data), source
         return await asyncio.to_thread(self._convert_sync, data, source, target)
 
     def _convert_sync(self, data: bytes, source: str, target: str) -> tuple[bytes, str]:
@@ -216,7 +241,7 @@ class AudioConverter:
         import pysilk
 
         pcm = io.BytesIO()
-        pysilk.decode(io.BytesIO(data), pcm, sample_rate=24000)
+        pysilk.decode(io.BytesIO(normalize_silk(data)), pcm, sample_rate=24000)
         out = io.BytesIO()
         with wave.open(out, "wb") as wav:
             wav.setparams((1, 2, 24000, 0, "NONE", "NONE"))

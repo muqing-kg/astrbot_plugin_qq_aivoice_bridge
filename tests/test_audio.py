@@ -3,15 +3,21 @@ import asyncio
 import pytest
 
 from core.audio import (
+    SILK_MAGIC,
     AudioConverter,
     VoiceCache,
+    normalize_silk,
     purge_legacy_cache_dir,
     sniff_audio_format,
 )
 
+# First 16 bytes captured from a live QQ AI voice download.
+QQ_SILK_HEAD = bytes.fromhex("03 23 21 53 49 4c 4b 5f 56 33 23 00 eb 04 6d 38")
+
 
 def test_sniff_common_formats():
     assert sniff_audio_format(b"\x02#!SILK_V3....") == "silk"
+    assert sniff_audio_format(b"#!SILK_V3....") == "silk"
     assert sniff_audio_format(b"RIFF\x00\x00\x00\x00WAVEfmt ") == "wav"
     assert sniff_audio_format(b"ID3\x04\x00\x00") == "mp3"
     assert sniff_audio_format(b"\xff\xfb\x90\x00") == "mp3"
@@ -90,4 +96,25 @@ def test_convert_short_circuits_when_format_matches(tmp_path):
     )
     assert data == payload
     assert fmt == "silk"
+
+
+def test_qq_silk_header_is_recognised():
+    """QQ sends a 0x03 marker; only 0x02 used to be accepted."""
+    assert sniff_audio_format(QQ_SILK_HEAD) == "silk"
+
+
+def test_silk_marker_is_normalised_to_0x02():
+    assert normalize_silk(QQ_SILK_HEAD)[:10] == bytes.fromhex(
+        "02 23 21 53 49 4c 4b 5f 56 33"
+    )
+    assert normalize_silk(b"\x02" + SILK_MAGIC + b"rest") == b"\x02" + SILK_MAGIC + b"rest"
+    assert normalize_silk(SILK_MAGIC + b"rest") == SILK_MAGIC + b"rest"
+
+
+def test_passthrough_silk_is_normalised(tmp_path):
+    converter = AudioConverter(tmp_path / "temp")
+    payload = QQ_SILK_HEAD + b"x" * 32
+    data, fmt = asyncio.run(converter.convert(payload, "silk", source_format="silk"))
+    assert fmt == "silk"
+    assert data[:10] == bytes.fromhex("02 23 21 53 49 4c 4b 5f 56 33")
 
