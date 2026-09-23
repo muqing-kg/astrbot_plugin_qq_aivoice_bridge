@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QQ 声聊跨平台 TTS</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f7f8;
+      color: #1d252b;
+    }
+    body { margin: 0; padding: 28px; }
+    .wrap { max-width: 860px; margin: 0 auto; }
+    .panel {
+      background: #fff; border: 1px solid #dce3e7; border-radius: 8px;
+      padding: 20px; margin-bottom: 18px; box-shadow: 0 1px 2px rgba(0,0,0,.03);
+    }
+    h1 { font-size: 22px; margin: 0 0 8px; }
+    h2 { font-size: 16px; margin: 0 0 14px; }
+    p, .hint { color: #687780; font-size: 13px; line-height: 1.6; }
+    label.row {
+      display: flex; gap: 12px; align-items: flex-start;
+      padding: 12px 0; border-top: 1px solid #edf1f3;
+    }
+    label.row:first-of-type { border-top: 0; }
+    input[type="checkbox"] { width: 18px; height: 18px; margin-top: 1px; }
+    .name { font-weight: 600; }
+    .meta { color: #7a878e; font-size: 12px; margin-top: 2px; }
+    button {
+      border: 0; border-radius: 6px; padding: 10px 16px; cursor: pointer;
+      background: #0e7490; color: #fff; font-weight: 600;
+    }
+    button:disabled { opacity: .5; cursor: default; }
+    #status { margin-left: 12px; font-size: 13px; color: #47727f; }
+    select {
+      width: 100%; min-height: 180px; padding: 8px;
+      border: 1px solid #cfd9de; border-radius: 6px; background: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <h1>QQ 声聊跨平台 TTS</h1>
+      <p>选择哪些 AstrBot 平台实例应作为 QQ 平台。留空时，所有平台默认按 QQ 处理。</p>
+    </div>
+    <div class="panel">
+      <h2>识别为 QQ 的平台</h2>
+      <p class="hint">按住 Ctrl 或 Command 可多选；一个都不选时，所有平台默认按 QQ 处理。</p>
+      <select id="platforms" multiple aria-label="QQ 平台选择"></select>
+      <div style="margin-top: 16px;">
+        <button id="save">保存平台选择</button>
+        <span id="status"></span>
+      </div>
+    </div>
+  </div>
+  <script>
+    const state = { platforms: [] };
+
+    function bridge() {
+      return window.AstrBotPluginPage;
+    }
+
+    function render() {
+      const root = document.getElementById("platforms");
+      if (!state.platforms.length) {
+        root.innerHTML = `<option disabled>没有检测到平台实例</option>`;
+        return;
+      }
+      root.innerHTML = state.platforms.map((item, index) => `
+        <option value="${escapeHtml(item.id)}" ${item.selected ? "selected" : ""}>
+          ${escapeHtml(item.name || item.id)} | ${escapeHtml(item.id)} | ${escapeHtml(item.type)}
+        </option>
+      `).join("");
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      }[c]));
+    }
+
+    async function load() {
+      const data = await bridge().apiGet("platforms");
+      state.platforms = data.platforms || [];
+      render();
+    }
+
+    document.getElementById("save").addEventListener("click", async () => {
+      const button = document.getElementById("save");
+      const status = document.getElementById("status");
+      const selected = [...document.getElementById("platforms").selectedOptions]
+        .map((item) => item.value);
+      button.disabled = true;
+      status.textContent = "保存中…";
+      try {
+        await bridge().apiPost("config/platforms", { qq_platforms: selected });
+        status.textContent = "已保存";
+        await load();
+      } catch (error) {
+        status.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    load().catch((error) => {
+      document.getElementById("platforms").textContent = error.message;
+    });
+  </script>
+</body>
+</html>

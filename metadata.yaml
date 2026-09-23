@@ -1,0 +1,13 @@
+name: astrbot_plugin_qq_aivoice_bridge
+display_name: QQ 声聊跨平台 TTS
+desc: 调用 NapCat/OneBot 的 QQ AI 声聊生成语音，并将 SILK、WAV、MP3 发送到当前平台。
+version: v0.1.0
+author: 沐倾
+astrbot_version: ">=4.0.0"
+entry: main
+tags:
+  - tts
+  - qq
+  - voice
+  - napcat
+  - cross-platform
