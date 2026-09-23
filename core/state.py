@@ -1,4 +1,9 @@
-"""Persistent group role overrides and QQ role cache."""
+"""Persistent group role overrides and an in-memory QQ role cache.
+
+Only the per-group role overrides are written to disk; they are user settings
+and must survive a restart. The role list returned by QQ is cached in memory
+with a TTL, so it never adds files or write churn to a long-running process.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +18,8 @@ from .roles import Role
 class StateStore:
     def __init__(self, data_dir: Path):
         self.path = Path(data_dir) / "state.json"
-        self._data: dict = {"group_roles": {}, "role_cache": {}}
+        self._data: dict = {"group_roles": {}}
+        self._role_cache: dict[tuple[str, str], tuple[float, list[Role]]] = {}
 
     def load(self) -> None:
         if not self.path.exists():
@@ -21,9 +27,12 @@ class StateStore:
         try:
             raw = json.loads(self.path.read_text(encoding="utf-8"))
             if isinstance(raw, dict):
-                self._data.update(raw)
+                group_roles = raw.get("group_roles")
+                self._data = {
+                    "group_roles": group_roles if isinstance(group_roles, dict) else {}
+                }
         except Exception:  # noqa: BLE001
-            self._data = {"group_roles": {}, "role_cache": {}}
+            self._data = {"group_roles": {}}
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -60,36 +69,15 @@ class StateStore:
     def get_cached_roles(self, platform_id: str, group_id: str, ttl: int) -> list[Role]:
         if ttl <= 0:
             return []
-        item = (
-            self._data.get("role_cache", {})
-            .get(str(platform_id), {})
-            .get(str(group_id))
-        )
-        if not isinstance(item, dict):
+        key = (str(platform_id), str(group_id))
+        item = self._role_cache.get(key)
+        if item is None:
             return []
-        try:
-            updated_at = float(item.get("updated_at", 0))
-        except (TypeError, ValueError):
-            return []
+        updated_at, roles = item
         if time.time() - updated_at > ttl:
+            self._role_cache.pop(key, None)
             return []
-        roles = item.get("characters")
-        if not isinstance(roles, list):
-            return []
-        return [
-            Role(str(r.get("character_id")), str(r.get("character_name") or r.get("character_id")))
-            for r in roles
-            if isinstance(r, dict) and r.get("character_id")
-        ]
+        return list(roles)
 
     def set_cached_roles(self, platform_id: str, group_id: str, roles: list[Role]) -> None:
-        platform = self._data.setdefault("role_cache", {}).setdefault(
-            str(platform_id), {}
-        )
-        platform[str(group_id)] = {
-            "updated_at": time.time(),
-            "characters": [
-                {"character_id": r.role_id, "character_name": r.name} for r in roles
-            ],
-        }
-        self.save()
+        self._role_cache[(str(platform_id), str(group_id))] = (time.time(), list(roles))

@@ -1,4 +1,4 @@
-"""Audio sniffing, conversion, and byte cache."""
+"""Audio sniffing, conversion, and a bounded in-memory voice cache."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import time
 import wave
+from collections import OrderedDict
 from pathlib import Path
 
 try:
@@ -20,6 +21,12 @@ except ImportError:
 
 
 SUPPORTED_FORMATS = {"silk", "wav", "mp3"}
+
+# The cache lives in process memory only. Long-running deployments must not be
+# able to grow it without bound, so every dimension has a hard ceiling.
+VOICE_CACHE_MAX_ENTRIES = 128
+VOICE_CACHE_MAX_BYTES = 32 * 1024 * 1024
+VOICE_CACHE_TTL = 3600
 
 
 def sniff_audio_format(data: bytes) -> str:
@@ -40,75 +47,103 @@ def sniff_audio_format(data: bytes) -> str:
     return "bin"
 
 
-class AudioConverter:
+def purge_legacy_cache_dir(data_dir: Path) -> bool:
+    """Delete the on-disk audio cache directory left by earlier versions."""
+    legacy = Path(data_dir) / "cache"
+    if not legacy.is_dir():
+        return False
+    shutil.rmtree(legacy, ignore_errors=True)
+    return True
+
+
+class VoiceCache:
+    """LRU cache of generated audio bytes that never touches the disk.
+
+    Bounded by entry count, total bytes and entry age, so a process that runs
+    for months holds at most ``max_bytes`` of audio. Expiry and eviction happen
+    inline on read/write; no timers, threads or background tasks are created.
+    """
+
     def __init__(
         self,
-        cache_dir: Path,
         *,
-        ffmpeg_path: str = "ffmpeg",
-        cache_ttl: int = 86400,
-        max_cache_mb: int = 200,
+        max_entries: int = VOICE_CACHE_MAX_ENTRIES,
+        max_bytes: int = VOICE_CACHE_MAX_BYTES,
+        ttl: int = VOICE_CACHE_TTL,
     ):
-        self.cache_dir = Path(cache_dir)
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.ffmpeg_path = ffmpeg_path or "ffmpeg"
-        self.cache_ttl = max(0, int(cache_ttl))
-        self.max_cache_bytes = max(0, int(max_cache_mb)) * 1024 * 1024
+        self._items: OrderedDict[str, tuple[bytes, str, float]] = OrderedDict()
+        self._max_entries = max(1, int(max_entries))
+        self._max_bytes = max(0, int(max_bytes))
+        self._ttl = max(0, int(ttl))
+        self._bytes = 0
 
-    def cache_key(self, character_id: str, output_format: str, text: str) -> str:
+    @staticmethod
+    def cache_key(character_id: str, output_format: str, text: str) -> str:
         raw = f"{character_id}\0{output_format}\0{text}".encode()
         return hashlib.sha256(raw).hexdigest()
 
-    def get_cache(self, key: str) -> tuple[bytes, str] | None:
-        if self.cache_ttl <= 0:
+    def get(self, key: str) -> tuple[bytes, str] | None:
+        item = self._items.get(key)
+        if item is None:
             return None
-        for path in self.cache_dir.glob(f"{key}.*"):
-            try:
-                if time.time() - path.stat().st_mtime > self.cache_ttl:
-                    path.unlink(missing_ok=True)
-                    continue
-                fmt = path.suffix.lstrip(".").lower()
-                return path.read_bytes(), fmt
-            except OSError:
-                continue
-        return None
+        data, fmt, stored_at = item
+        if self._ttl > 0 and time.time() - stored_at > self._ttl:
+            self._drop(key)
+            return None
+        self._items.move_to_end(key)
+        return data, fmt
 
-    def put_cache(self, key: str, data: bytes, fmt: str) -> Path:
-        path = self.cache_dir / f"{key}.{fmt}"
-        path.write_bytes(data)
-        self.cleanup()
-        return path
+    def put(self, key: str, data: bytes, fmt: str) -> None:
+        if not data:
+            return
+        self._drop(key)
+        self._items[key] = (bytes(data), str(fmt), time.time())
+        self._bytes += len(data)
+        self._evict()
 
-    def cleanup(self) -> None:
-        if self.cache_ttl > 0:
+    def clear(self) -> None:
+        self._items.clear()
+        self._bytes = 0
+
+    def _drop(self, key: str) -> None:
+        item = self._items.pop(key, None)
+        if item is not None:
+            self._bytes -= len(item[0])
+
+    def _evict(self) -> None:
+        if self._ttl > 0:
             now = time.time()
-            for path in list(self.cache_dir.glob("*")):
-                try:
-                    if now - path.stat().st_mtime > self.cache_ttl:
-                        path.unlink(missing_ok=True)
-                except OSError:
-                    continue
-        if self.max_cache_bytes <= 0:
-            return
-        files = []
-        total = 0
-        for path in self.cache_dir.glob("*"):
+            stale = [k for k, v in self._items.items() if now - v[2] > self._ttl]
+            for key in stale:
+                self._drop(key)
+        while self._items and (
+            len(self._items) > self._max_entries or self._bytes > self._max_bytes
+        ):
+            key, item = self._items.popitem(last=False)
+            self._bytes -= len(item[0])
+
+
+class AudioConverter:
+    def __init__(self, temp_dir: Path, *, ffmpeg_path: str = "ffmpeg"):
+        self.temp_dir = Path(temp_dir)
+        self.temp_dir.mkdir(parents=True, exist_ok=True)
+        self.ffmpeg_path = ffmpeg_path or "ffmpeg"
+
+    def purge_temp_files(self) -> int:
+        """Delete audio files left behind by a crash or an unclean shutdown."""
+        removed = 0
+        for path in self.temp_dir.glob("*"):
             try:
-                stat = path.stat()
+                if path.is_file():
+                    path.unlink()
+                    removed += 1
             except OSError:
                 continue
-            files.append((stat.st_mtime, stat.st_size, path))
-            total += stat.st_size
-        if total <= self.max_cache_bytes:
-            return
-        for _, size, path in sorted(files):
-            if total <= self.max_cache_bytes:
-                break
-            try:
-                path.unlink(missing_ok=True)
-                total -= size
-            except OSError:
-                continue
+        return removed
+
+    def new_temp_path(self, fmt: str) -> Path:
+        suffix = str(fmt or "bin").lower()
+        return self.temp_dir / f"qq_aivoice_{time.time_ns()}.{suffix}"
 
     async def convert(
         self,
@@ -150,7 +185,7 @@ class AudioConverter:
                 return self._ffmpeg_to_mp3(wav_data), "mp3"
         except Exception as e:  # noqa: BLE001
             logger.warning(
-                "QQ AIVoice: conversion failed %s -> %s: %s",
+                "[QQ声聊] 音频转换失败 %s -> %s: %s",
                 source,
                 target,
                 e,
@@ -161,7 +196,7 @@ class AudioConverter:
                     return wav_data, "wav"
                 except Exception as fallback_error:  # noqa: BLE001
                     logger.warning(
-                        "QQ AIVoice: WAV fallback failed: %s",
+                        "[QQ声聊] 转换失败后回退 WAV 也失败了: %s",
                         fallback_error,
                     )
         return data, source

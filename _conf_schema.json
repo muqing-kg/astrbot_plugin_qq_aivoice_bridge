@@ -234,18 +234,6 @@
         "type": "int",
         "default": 2
       },
-      "cache_ttl": {
-        "description": "音频缓存时长（秒）",
-        "hint": "0=不缓存。缓存的是音频字节，不是 QQ URL。",
-        "type": "int",
-        "default": 86400
-      },
-      "max_cache_mb": {
-        "description": "音频缓存上限（MB）",
-        "hint": "超过后按修改时间清理最旧文件。",
-        "type": "int",
-        "default": 200
-      },
       "ffmpeg_path": {
         "description": "FFmpeg 路径",
         "hint": "用于 WAV/MP3 转换；保留 ffmpeg 表示使用 PATH。",

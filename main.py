@@ -5,10 +5,11 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from astrbot.api import logger
 from astrbot.api.event import filter
 from astrbot.api.star import Context, Star, StarTools
 
-from .core.audio import AudioConverter
+from .core.audio import AudioConverter, purge_legacy_cache_dir
 from .core.config import ConfigManager
 from .core.pipeline import VoicePipeline
 from .core.qq_voice import QQVoiceClient
@@ -26,10 +27,16 @@ class QQAIVoiceBridgePlugin(Star):
         self.state = StateStore(self.data_dir)
         self.state.load()
         self.converter = AudioConverter(
-            self.data_dir / "cache",
+            self.data_dir / "temp",
             ffmpeg_path=self.config.ffmpeg_path,
-            cache_ttl=self.config.cache_ttl,
-            max_cache_mb=self.config.max_cache_mb,
+        )
+        leftover = self.converter.purge_temp_files()
+        if purge_legacy_cache_dir(self.data_dir):
+            logger.info("[QQ声聊] 已清除旧版本的磁盘音频缓存目录")
+        if leftover:
+            logger.info("[QQ声聊] 已清理上次运行残留的 %d 个音频文件", leftover)
+        logger.info(
+            "[QQ声聊] 插件已启用：音色缓存只驻留内存，音频文件发送后立即删除"
         )
         self.qq = QQVoiceClient(context, self.config)
         self.pipeline = VoicePipeline(self, self.qq, self.converter)

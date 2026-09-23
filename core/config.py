@@ -38,8 +38,6 @@ class ConfigManager:
         "timeout": 30,
         "max_retries": 1,
         "max_concurrency": 2,
-        "cache_ttl": 86400,
-        "max_cache_mb": 200,
         "ffmpeg_path": "ffmpeg",
         "debug_log": False,
     }
@@ -184,14 +182,6 @@ class ConfigManager:
     @property
     def max_concurrency(self) -> int:
         return max(1, self._int("max_concurrency", 2))
-
-    @property
-    def cache_ttl(self) -> int:
-        return max(0, self._int("cache_ttl", 86400))
-
-    @property
-    def max_cache_mb(self) -> int:
-        return max(0, self._int("max_cache_mb", 200))
 
     @property
     def ffmpeg_path(self) -> str:
