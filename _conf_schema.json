@@ -200,8 +200,9 @@
       },
       "polish_llm_provider": {
         "description": "润色 LLM Provider",
-        "hint": "留空则使用当前对话模型；建议选择轻量快速模型。",
+        "hint": "下拉选择已配置的模型提供商。不选择时使用当前对话模型；建议选轻量快速模型。",
         "type": "string",
+        "_special": "select_provider",
         "default": ""
       },
       "polish_prompt": {
