@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from functools import partial
 
+from astrbot.api.web import error_response, json_response, request
+
+from .core.qq_voice import platform_meta
+
 
 async def api_platforms(plugin):
-    from quart import jsonify
-
     selected = set(plugin.config.qq_platforms)
     platforms = []
     try:
@@ -15,37 +17,40 @@ async def api_platforms(plugin):
     except Exception:  # noqa: BLE001
         instances = []
     for inst in instances:
-        metadata = getattr(inst, "metadata", None)
+        metadata = platform_meta(inst)
         if not metadata:
             continue
+        platform_id = str(getattr(metadata, "id", "") or "")
         platforms.append(
             {
-                "id": str(getattr(metadata, "id", "")),
-                "name": str(getattr(metadata, "id", "") or getattr(metadata, "name", "")),
+                "id": platform_id,
+                "name": str(
+                    getattr(metadata, "adapter_display_name", "")
+                    or platform_id
+                    or getattr(metadata, "name", "")
+                ),
                 "type": str(getattr(metadata, "name", "")),
-                "selected": str(getattr(metadata, "id", "")) in selected,
+                "selected": platform_id in selected,
             }
         )
-    return jsonify({"platforms": platforms, "all_qq_when_empty": True})
+    return json_response({"platforms": platforms, "all_qq_when_empty": True})
 
 
 async def api_config(plugin):
-    from quart import jsonify
-
-    return jsonify({"config": dict(plugin.config._flat)})
+    return json_response({"config": dict(plugin.config._flat)})
 
 
 async def api_update_platforms(plugin):
-    from quart import jsonify, request
-
-    body = await request.json
+    body = await request.json(default={})
+    if not isinstance(body, dict):
+        return error_response("request body must be a JSON object", status_code=400)
     values = body.get("qq_platforms", [])
     if not isinstance(values, list):
-        return jsonify({"error": "qq_platforms must be a list"}), 400
+        return error_response("qq_platforms must be a list", status_code=400)
     cleaned = [str(value).strip() for value in values if str(value or "").strip()]
     plugin.config.set("qq_platforms", cleaned)
     plugin.save_config()
-    return jsonify({"status": "ok", "qq_platforms": cleaned})
+    return json_response({"status": "ok", "qq_platforms": cleaned})
 
 
 def register_web_apis(context, plugin) -> None:

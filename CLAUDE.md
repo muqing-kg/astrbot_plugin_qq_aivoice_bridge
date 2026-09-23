@@ -1,6 +1,6 @@
 # QQ AI Voice Bridge - Rules
 
-Stack: Python 3.10+ AstrBot plugin, aiocqhttp/NapCat, `pilk`.
+Stack: Python 3.10+ AstrBot plugin, aiocqhttp/NapCat, `silk-python`.
 
 ## Git
 
@@ -21,4 +21,3 @@ Stack: Python 3.10+ AstrBot plugin, aiocqhttp/NapCat, `pilk`.
 1. Apex truth: `SOURCE_OF_TRUTH.md`.
 2. Architecture and phases: `ARCHITECTURE_ROADMAP.md`.
 3. Tasks: `TODO_WORKFLOW.md`.
-

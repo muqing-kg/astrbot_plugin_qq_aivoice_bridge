@@ -17,7 +17,7 @@ platforms.
 |---|---|---|
 | AstrBot plugin | Python 3.10+ | lifecycle, event hooks, commands |
 | QQ bridge | aiocqhttp / NapCat OneBot | `get_ai_characters`, `get_ai_record` |
-| Audio | `pilk`, `wave`, FFmpeg | SILK/WAV/MP3 conversion |
+| Audio | `silk-python`, `wave`, FFmpeg | SILK/WAV/MP3 conversion |
 | State | JSON files | role overrides, cache metadata, optional session state |
 | UI | AstrBot config schema + optional plugin page | static options, dynamic platform list |
 

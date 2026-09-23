@@ -5,12 +5,12 @@ AstrBot 平台。插件不登录 QQ，不修改 NapCat，也不要求第三方 T
 
 ## 依赖
 
-- AstrBot `>=4.0.0`
+- AstrBot `>=4.26,<5`（插件页使用 `astrbot.api.web`，需要 FastAPI 后端）
 - NapCat 或实现了以下扩展 action 的 OneBot 实现：
   - `get_ai_characters`
   - `get_ai_record`
 - Python `aiohttp`
-- Python `pilk`
+- Python `silk-python`
 - FFmpeg，用于 WAV/MP3 转换
 
 ## 工作规则
@@ -61,3 +61,8 @@ AstrBot 平台。插件不登录 QQ，不修改 NapCat，也不要求第三方 T
 - 其他平台模式下，插件下载音频并按配置转换成 `silk`、`wav` 或 `mp3`。
 - QQ 返回的下载 URL 带时效参数。插件缓存最终音频字节，不保存 URL。
 
+## 参考项目
+
+- [SteveBaka/astrbot_plugin_mimo_tts](https://github.com/SteveBaka/astrbot_plugin_mimo_tts)：分段、润色和配置交互思路参考，MIT License。
+- [zgojin/astrbot_plugin_AIQTalk](https://github.com/zgojin/astrbot_plugin_AIQTalk)：QQ AI 角色调用方式参考。
+- [Zhalslar/astrbot_plugin_record_converter](https://github.com/Zhalslar/astrbot_plugin_record_converter)：QQ AI 语音 URL 获取和转发思路参考。

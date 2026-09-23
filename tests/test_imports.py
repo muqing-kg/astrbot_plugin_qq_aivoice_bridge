@@ -16,6 +16,7 @@ def test_plugin_modules_import_with_minimal_astrbot_stubs(monkeypatch):
     event_mod = _module("astrbot.api.event")
     components_mod = _module("astrbot.api.message_components")
     star_mod = _module("astrbot.api.star")
+    web_mod = _module("astrbot.api.web")
 
     api.logger = SimpleNamespace(info=lambda *a, **k: None, warning=lambda *a, **k: None)
 
@@ -72,6 +73,12 @@ def test_plugin_modules_import_with_minimal_astrbot_stubs(monkeypatch):
     star_mod.Star = Star
     star_mod.StarTools = StarTools
     star_mod.Context = Context
+    web_mod.json_response = lambda value: value
+    web_mod.error_response = lambda message, status_code=500: {
+        "error": message,
+        "status": status_code,
+    }
+    web_mod.request = SimpleNamespace()
     astrbot.api = api
 
     importlib.invalidate_caches()

@@ -16,6 +16,23 @@ except ImportError:
 from .roles import Role, normalize_roles
 
 
+def platform_meta(instance):
+    """Return a platform adapter's ``PlatformMetadata``.
+
+    AstrBot exposes it through ``Platform.meta()``. Some adapters also keep the
+    same object on ``.metadata``, so that attribute is used as a fallback.
+    """
+    getter = getattr(instance, "meta", None)
+    if callable(getter):
+        try:
+            meta = getter()
+        except Exception:  # noqa: BLE001 - fall back to the attribute below
+            meta = None
+        if meta is not None:
+            return meta
+    return getattr(instance, "metadata", None)
+
+
 @dataclass
 class QQAdapter:
     adapter: object
@@ -48,7 +65,7 @@ class QQVoiceClient:
         except Exception:  # noqa: BLE001
             return result
         for inst in instances:
-            metadata = getattr(inst, "metadata", None)
+            metadata = platform_meta(inst)
             if not metadata:
                 continue
             if str(getattr(metadata, "name", "")) != "aiocqhttp":

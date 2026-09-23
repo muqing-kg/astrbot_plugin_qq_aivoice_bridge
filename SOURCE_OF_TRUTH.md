@@ -122,12 +122,13 @@ prefer the role list returned by QQ at runtime.
 Why: The static list works offline and gives a usable config page; live data
 handles server changes and account-specific availability.
 
-### D-004: `pilk` for SILK, FFmpeg for MP3
+### D-004: `silk-python` for SILK, FFmpeg for MP3
 
-Decision: Decode SILK with `pilk`; use FFmpeg for MP3 encoding.
+Decision: Decode SILK with `silk-python`; use FFmpeg for MP3 encoding.
 
-Why: Python does not provide SILK support in the standard library. `pilk` is a
-small Python dependency; FFmpeg is already common in AstrBot deployments.
+Why: Python does not provide SILK support in the standard library.
+`silk-python` is a BSD-licensed Python dependency with prebuilt wheels;
+FFmpeg is already common in AstrBot deployments.
 
 ### D-005: URL cache is forbidden
 
