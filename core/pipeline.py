@@ -28,6 +28,17 @@ from .segmentation import (
 from .text_utils import extract_plain_text, should_skip
 
 ROLE_CACHE_TTL = 3600
+ERROR_PREVIEW_LIMIT = 200
+
+
+def _brief(error: BaseException, limit: int = ERROR_PREVIEW_LIMIT) -> str:
+    """Collapse an exception into one short log line.
+
+    Platform adapters can raise with a whole ffmpeg banner attached; the raw
+    message would bury everything else in the log.
+    """
+    text = " ".join(str(error).split())
+    return text if len(text) <= limit else text[:limit] + "…"
 
 
 class VoicePipeline:
@@ -81,8 +92,7 @@ class VoicePipeline:
                 "[QQ声聊] 识别到%s消息，但没有可用的 QQ 中转群，本条按文字发送",
                 kind,
             )
-            if cfg.send_text_with_tts:
-                await self._safe_send_text(event, display_text)
+            await self._safe_send_text(event, display_text)
             result.chain = []
             return
 
@@ -103,8 +113,7 @@ class VoicePipeline:
         include_text = self.config.send_text_with_tts
         if role is None:
             logger.info("[QQ声聊] 没有可用的声聊角色，本条按文字发送")
-            if include_text:
-                await self._safe_send_text(event, display_text)
+            await self._safe_send_text(event, display_text)
             result.chain = []
             return
 
@@ -117,7 +126,7 @@ class VoicePipeline:
                 text_sent = await self._safe_send_text(event, display_text)
             logger.info("[QQ声聊] 发送形式：QQ 服务端直发语音")
             ok = await self._native_generate(route, role, text)
-            if not ok and include_text and not text_sent:
+            if not ok and not text_sent:
                 logger.info("[QQ声聊] QQ 声聊生成失败，本条改发文字")
                 await self._safe_send_text(event, display_text)
             result.chain = []
@@ -126,7 +135,7 @@ class VoicePipeline:
         path = await self._generate_file(route, role, text)
         if path is None:
             logger.info("[QQ声聊] 语音合成失败，本条改发文字")
-            if include_text and not text_sent:
+            if not text_sent:
                 await self._safe_send_text(event, display_text)
             result.chain = []
             return
@@ -214,7 +223,7 @@ class VoicePipeline:
                 await self._send_audio(event, path, text_part)
                 voice_count += 1
             except Exception as e:  # noqa: BLE001
-                logger.warning("[QQ声聊] 分段语音发送失败：%s", e)
+                logger.warning("[QQ声聊] 分段语音发送失败：%s", _brief(e))
             finally:
                 self._discard(path)
 
@@ -273,7 +282,7 @@ class VoicePipeline:
             logger.info("[QQ声聊] QQ 声聊已生成语音")
             return True
         except Exception as e:  # noqa: BLE001
-            logger.warning("[QQ声聊] QQ 声聊生成失败：%s", e)
+            logger.warning("[QQ声聊] QQ 声聊生成失败：%s", _brief(e))
             return False
 
     async def _generate_file(self, route: QQRoute, role: Role, text: str) -> Path | None:
@@ -299,6 +308,12 @@ class VoicePipeline:
                     raise RuntimeError("empty audio URL")
                 raw = await self.qq.download(url)
             source = sniff_audio_format(raw)
+            if source == "bin":
+                logger.warning(
+                    "[QQ声聊] 无法识别 QQ 返回的音频格式（%d 字节，前 16 字节：%s）",
+                    len(raw),
+                    raw[:16].hex(" "),
+                )
             if source != fmt:
                 logger.info("[QQ声聊] 音频转换：%s → %s", source.upper(), fmt.upper())
             converted, actual = await self.converter.convert(raw, fmt, source_format=source)
@@ -317,7 +332,7 @@ class VoicePipeline:
             )
             return path
         except Exception as e:  # noqa: BLE001
-            logger.warning("[QQ声聊] 语音合成失败：%s", e)
+            logger.warning("[QQ声聊] 语音合成失败：%s", _brief(e))
             return None
 
     def _write_temp(self, data: bytes, fmt: str) -> Path:
@@ -336,7 +351,7 @@ class VoicePipeline:
         try:
             await self._send_audio(event, path, text)
         except Exception as e:  # noqa: BLE001
-            logger.warning("[QQ声聊] 后台补发语音失败：%s", e)
+            logger.warning("[QQ声聊] 后台补发语音失败：%s", _brief(e))
         finally:
             self._discard(path)
 
@@ -350,7 +365,7 @@ class VoicePipeline:
             logger.info("[QQ声聊] 语音已发送")
             return
         except Exception as e:  # noqa: BLE001
-            logger.warning("[QQ声聊] 语音消息发送失败，改发音频文件：%s", e)
+            logger.warning("[QQ声聊] 语音消息发送失败，改发音频文件：%s", _brief(e))
 
         file_chain = []
         if text:
@@ -369,7 +384,7 @@ class VoicePipeline:
             logger.info("[QQ声聊] 文字已发送")
             return True
         except Exception as e:  # noqa: BLE001
-            logger.warning("[QQ声聊] 文字发送失败：%s", e)
+            logger.warning("[QQ声聊] 文字发送失败：%s", _brief(e))
             return False
 
     async def _send_text_if(self, event, text: str, enabled: bool) -> int:

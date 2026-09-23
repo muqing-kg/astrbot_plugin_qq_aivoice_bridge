@@ -206,7 +206,18 @@ class QQVoiceClient:
             self._session = aiohttp.ClientSession(timeout=timeout)
         async with self._session.get(url) as resp:
             resp.raise_for_status()
-            return await resp.read()
+            data = await resp.read()
+            content_type = str(resp.headers.get("Content-Type") or "")
+        kind = content_type.split(";", 1)[0].strip().lower()
+        if kind and not kind.startswith(
+            ("audio/", "application/octet-stream", "binary/", "video/")
+        ):
+            logger.warning(
+                "[QQ声聊] 下载语音时 QQ 返回的不是音频类型：%s（%d 字节）",
+                kind,
+                len(data),
+            )
+        return data
 
     async def close(self) -> None:
         if self._session and not self._session.closed:

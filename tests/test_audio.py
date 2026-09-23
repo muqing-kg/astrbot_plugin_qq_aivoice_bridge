@@ -1,3 +1,7 @@
+import asyncio
+
+import pytest
+
 from core.audio import (
     AudioConverter,
     VoiceCache,
@@ -67,4 +71,23 @@ def test_legacy_cache_dir_is_removed(tmp_path):
     assert purge_legacy_cache_dir(tmp_path) is True
     assert not legacy.exists()
     assert purge_legacy_cache_dir(tmp_path) is False
+
+
+def test_convert_raises_when_payload_cannot_be_converted(tmp_path):
+    """A payload ffmpeg cannot decode must fail, not silently pass through."""
+    converter = AudioConverter(tmp_path / "temp")
+    with pytest.raises(RuntimeError):
+        asyncio.run(
+            converter.convert(b"this is not audio at all", "wav", source_format="bin")
+        )
+
+
+def test_convert_short_circuits_when_format_matches(tmp_path):
+    converter = AudioConverter(tmp_path / "temp")
+    payload = b"\x02#!SILK_V3fake"
+    data, fmt = asyncio.run(
+        converter.convert(payload, "silk", source_format="silk")
+    )
+    assert data == payload
+    assert fmt == "silk"
 

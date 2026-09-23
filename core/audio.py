@@ -183,7 +183,7 @@ class AudioConverter:
                 if source != "wav":
                     wav_data = self._to_wav(data, source)
                 return self._ffmpeg_to_mp3(wav_data), "mp3"
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning(
                 "[QQ声聊] 音频转换失败 %s -> %s: %s",
                 source,
@@ -199,7 +199,10 @@ class AudioConverter:
                         "[QQ声聊] 转换失败后回退 WAV 也失败了: %s",
                         fallback_error,
                     )
-        return data, source
+            # Never hand back the untouched payload as if it were ``target``;
+            # callers send whatever comes out of here, so a silent pass-through
+            # turns into a broken voice message downstream.
+            raise
 
     def _to_wav(self, data: bytes, source: str) -> bytes:
         if source == "silk":
