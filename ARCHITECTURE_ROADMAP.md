@@ -2,7 +2,7 @@
 
 Version: 0.1.0
 Status: Active
-Owner: 云霄
+Owner: 沐倾
 
 ## 0. Executive Context
 
@@ -145,4 +145,3 @@ the documented all-QQ default.
 - No blocking network or FFmpeg calls on the event loop.
 - All user text shown in the current platform must be plain text; audio tags
   are stripped.
-

@@ -2,7 +2,7 @@
 
 Version: 0.1.0
 Status: Active
-Owner: 云霄
+Owner: 沐倾
 
 ## 1. Scope
 
@@ -134,4 +134,3 @@ small Python dependency; FFmpeg is already common in AstrBot deployments.
 Decision: Cache only downloaded bytes.
 
 Why: QQ download URLs carry `rkey` and expire.
-
