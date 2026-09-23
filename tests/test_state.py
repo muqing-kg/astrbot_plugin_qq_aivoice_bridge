@@ -13,4 +13,14 @@ def test_role_cache_stays_bounded(tmp_path):
         store.set_cached_roles("qq-main", f"group{index}", [ROLE])
 
     assert len(store._role_cache) == ROLE_CACHE_MAX_ENTRIES
-    assert store.get_cached_roles("qq-main", f"group{total - 1}", 3600) == [ROLE]
+    assert store.get_cached_roles("qq-main", f"group{total - 1}") == [ROLE]
+
+
+def test_role_cache_never_expires(tmp_path, monkeypatch):
+    """The QQ role catalog is fixed, so a cached list must not time out."""
+    store = StateStore(tmp_path)
+    store.set_cached_roles("qq-main", "10086", [ROLE])
+
+    monkeypatch.setattr("core.state.time.time", lambda: 10**9)
+
+    assert store.get_cached_roles("qq-main", "10086") == [ROLE]

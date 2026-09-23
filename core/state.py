@@ -1,8 +1,8 @@
 """Persistent group role overrides and an in-memory QQ role cache.
 
 Only the per-group role overrides are written to disk; they are user settings
-and must survive a restart. The role list returned by QQ is cached in memory
-with a TTL, so it never adds files or write churn to a long-running process.
+and must survive a restart. The role list returned by QQ is a fixed catalog, so
+it is fetched once per group per process and kept in memory only.
 """
 
 from __future__ import annotations
@@ -68,18 +68,12 @@ class StateStore:
             self.save()
         return existed
 
-    def get_cached_roles(self, platform_id: str, group_id: str, ttl: int) -> list[Role]:
-        if ttl <= 0:
-            return []
-        key = (str(platform_id), str(group_id))
-        item = self._role_cache.get(key)
-        if item is None:
-            return []
-        updated_at, roles = item
-        if time.time() - updated_at > ttl:
-            self._role_cache.pop(key, None)
-            return []
-        return list(roles)
+    def get_cached_roles(self, platform_id: str, group_id: str) -> list[Role]:
+        # ponytail: the QQ role catalog does not change while the process runs,
+        # so the cache carries no TTL and a restart is the refresh path. Add an
+        # expiry back only if QQ starts rotating the catalog.
+        item = self._role_cache.get((str(platform_id), str(group_id)))
+        return list(item[1]) if item else []
 
     def set_cached_roles(self, platform_id: str, group_id: str, roles: list[Role]) -> None:
         self._role_cache[(str(platform_id), str(group_id))] = (time.time(), list(roles))

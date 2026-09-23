@@ -27,8 +27,6 @@ from .segmentation import (
 )
 from .text_utils import brief_error, extract_plain_text, should_skip
 
-ROLE_CACHE_TTL = 3600
-
 # A background send owns a temp file and the reply it carries, so it is given a
 # moment to finish before the plugin stops.
 SHUTDOWN_GRACE = 5.0
@@ -323,11 +321,7 @@ class VoicePipeline:
         result.chain = []
 
     async def _roles_for_route(self, route: QQRoute) -> list[Role]:
-        cached = self.plugin.state.get_cached_roles(
-            route.platform_id,
-            route.group_id,
-            ROLE_CACHE_TTL,
-        )
+        cached = self.plugin.state.get_cached_roles(route.platform_id, route.group_id)
         if cached:
             logger.debug("[QQ声聊] 复用内存中的角色列表，共 %d 个", len(cached))
             return cached
