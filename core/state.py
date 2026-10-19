@@ -1,8 +1,8 @@
-"""Persistent group role overrides and an in-memory QQ role cache.
+"""Persistent per-conversation role overrides and an in-memory QQ role cache.
 
-Only the per-group role overrides are written to disk; they are user settings
-and must survive a restart. The role list returned by QQ is a fixed catalog, so
-it is fetched once per group per process and kept in memory only.
+Only the role overrides are written to disk; they are user settings and must
+survive a restart. The role list returned by QQ is a fixed catalog, so it is
+fetched once per relay group per process and kept in memory only.
 """
 
 from __future__ import annotations
@@ -45,28 +45,47 @@ class StateStore:
         )
         os.replace(tmp, self.path)
 
-    def get_group_role(self, platform_id: str, group_id: str) -> str:
+    def get_group_role(self, platform_id: str, conversation: str) -> str:
         return str(
             self._data.get("group_roles", {})
             .get(str(platform_id), {})
-            .get(str(group_id), "")
+            .get(str(conversation), "")
             or ""
         ).strip()
 
-    def set_group_role(self, platform_id: str, group_id: str, role_id: str) -> None:
+    def set_group_role(
+        self, platform_id: str, conversation: str, role_id: str
+    ) -> None:
         platform = self._data.setdefault("group_roles", {}).setdefault(
             str(platform_id), {}
         )
-        platform[str(group_id)] = str(role_id)
+        platform[str(conversation)] = str(role_id)
         self.save()
 
-    def clear_group_role(self, platform_id: str, group_id: str) -> bool:
+    def clear_group_role(self, platform_id: str, conversation: str) -> bool:
         group_map = self._data.get("group_roles", {}).get(str(platform_id), {})
-        existed = str(group_id) in group_map
-        group_map.pop(str(group_id), None)
+        existed = str(conversation) in group_map
+        group_map.pop(str(conversation), None)
         if existed:
             self.save()
         return existed
+
+    def list_group_roles(self) -> list[tuple[str, str, str]]:
+        """Return every stored override as ``(platform_id, conversation, role_id)``.
+
+        The on-disk section is still named ``group_roles`` because earlier
+        versions wrote overrides there and the file must stay readable.
+        """
+        result: list[tuple[str, str, str]] = []
+        for platform_id, conversations in self._data.get("group_roles", {}).items():
+            if not isinstance(conversations, dict):
+                continue
+            for conversation, role_id in conversations.items():
+                value = str(role_id or "").strip()
+                if value:
+                    result.append((str(platform_id), str(conversation), value))
+        result.sort()
+        return result
 
     def get_cached_roles(self, platform_id: str, group_id: str) -> list[Role]:
         # ponytail: the QQ role catalog does not change while the process runs,

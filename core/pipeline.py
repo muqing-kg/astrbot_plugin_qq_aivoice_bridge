@@ -12,6 +12,7 @@ from astrbot.api.event import MessageChain
 from astrbot.api.message_components import File, Plain, Record
 
 from .audio import AudioConverter, VoiceCache, sniff_audio_format
+from .conversation import conversation_key
 from .polish import polish_text
 from .qq_voice import QQRoute, QQVoiceClient
 from .roles import Role, resolve_role
@@ -121,7 +122,7 @@ class VoicePipeline:
 
     async def _handle_single(self, event, result, route: QQRoute, text: str, display_text: str) -> None:
         roles = await self._roles_for_route(route)
-        role = self._pick_role(event, route, roles)
+        role = self._pick_role(event, roles)
         include_text = self.config.send_text_with_tts
         if role is None:
             logger.info("[QQ声聊] 没有可用的声聊角色，本条按文字发送")
@@ -209,7 +210,7 @@ class VoicePipeline:
             else split_text(display_text, cfg.segment_pattern, cfg.segment_max_count)
         )
         roles = await self._roles_for_route(route)
-        role = self._pick_role(event, route, roles)
+        role = self._pick_role(event, roles)
 
         logger.info("[QQ声聊] 文本分为 %d 段，逐段生成语音", len(plans))
         voice_count = 0
@@ -335,25 +336,66 @@ class VoicePipeline:
             logger.info("[QQ声聊] 已从 QQ 获取到 %d 个声聊角色", len(roles))
         return roles
 
-    async def native_group_roles(self, event) -> tuple[QQRoute, list[Role]] | None:
+    async def command_roles(self, event) -> tuple[QQRoute, list[Role]] | None:
+        """Resolve the group a command acts on, together with its role catalog.
+
+        Returns ``None`` only when no QQ group is reachable at all, so callers
+        can tell "nothing configured" apart from "configured but empty".
+        """
         route = self.qq.resolve_route(event)
-        if not route or not route.native:
+        if not route:
             return None
         return route, await self._roles_for_route(route)
 
-    def _pick_role(self, event, route: QQRoute, roles: list[Role]) -> Role | None:
+    def _pick_role(self, event, roles: list[Role]) -> Role | None:
         if not roles:
             return None
-        if route.native:
-            group_id = str(event.get_group_id() or "")
-            override = self.plugin.state.get_group_role(route.platform_id, group_id)
-            role = resolve_role(override, roles)
-            if role:
-                logger.info("[QQ声聊] 使用本群单独指定的角色：%s", role.name)
-                return role
+        platform_id, conversation = conversation_key(event)
+        override = self.plugin.state.get_group_role(platform_id, conversation)
+        role = resolve_role(override, roles) if override else None
+        if role:
+            logger.info("[QQ声聊] 使用本会话单独指定的角色：%s", role.name)
+            return role
         role = resolve_role(self.config.default_role, roles) or roles[0]
         logger.info("[QQ声聊] 使用全局默认角色：%s", role.name)
         return role
+
+    async def speak_now(self, event, text: str) -> tuple[bool, str]:
+        """Synthesise and send one voice message for the test command.
+
+        Trigger probability and text-length limits are skipped, but role
+        selection, polishing and delivery stay identical to normal replies so
+        the test sounds exactly like production.
+        """
+        context = await self.command_roles(event)
+        if context is None:
+            return False, "没有可用的 QQ 中转群。请先在插件配置里填写中转群号。"
+        route, roles = context
+        if not roles:
+            where = "当前群" if route.native else "中转群"
+            return False, f"{where}没有返回可用的声聊角色。请确认 QQ 侧已开通声聊。"
+        role = self._pick_role(event, roles)
+        if role is None:
+            return False, "没有可用的声聊角色。"
+
+        spoken = await polish_text(self.plugin, text, event.unified_msg_origin)
+
+        if route.native:
+            if not await self._native_generate(route, role, spoken):
+                return False, "QQ 声聊生成失败，请查看插件日志。"
+            return True, f"已发送测试语音，角色：{role.name}"
+
+        path = await self._generate_file(route, role, spoken)
+        if path is None:
+            return False, "语音合成失败，请查看插件日志。"
+        try:
+            await self._send_audio(event, path, "")
+        except Exception as e:  # noqa: BLE001
+            logger.warning("[QQ声聊] 测试语音发送失败：%s", brief_error(e))
+            return False, f"语音发送失败：{brief_error(e)}"
+        finally:
+            self._discard(path)
+        return True, f"已发送测试语音，角色：{role.name}"
 
     async def _native_generate(self, route: QQRoute, role: Role, text: str) -> bool:
         try:

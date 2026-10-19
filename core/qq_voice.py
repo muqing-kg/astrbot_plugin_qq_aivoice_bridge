@@ -15,6 +15,10 @@ from .text_utils import brief_error
 # not worth holding in memory.
 MAX_AUDIO_BYTES = 8 * 1024 * 1024
 
+# Group names are a WebUI nicety, so a slow lookup is dropped rather than
+# delaying the whole page.
+GROUP_INFO_TIMEOUT = 3.0
+
 
 def platform_meta(instance):
     """Return a platform adapter's ``PlatformMetadata``.
@@ -145,6 +149,15 @@ class QQVoiceClient:
             if bot:
                 return QQRoute(bot, current_platform, current_group, native=True)
 
+        return self.relay_route(event)
+
+    def relay_route(self, event=None) -> QQRoute | None:
+        """Return the configured relay group as a route.
+
+        ``event`` is optional so the WebUI can inspect the relay route without a
+        message; with an event, an unconfigured platform list prefers the
+        instance that received the message.
+        """
         relay_group = self.config.relay_group
         if not relay_group:
             return None
@@ -157,6 +170,26 @@ class QQVoiceClient:
             relay_group,
             native=False,
         )
+
+    async def group_display_name(self, platform_id: str, group_id: str) -> str:
+        """Return a group's display name, or an empty string when unavailable.
+
+        Only QQ instances can answer this, so relayed platforms simply have no
+        name to show.
+        """
+        adapter = self._adapter_by_id(platform_id)
+        if not adapter or not adapter.bot:
+            return ""
+        try:
+            info = await asyncio.wait_for(
+                adapter.bot.call_action("get_group_info", group_id=str(group_id)),
+                timeout=GROUP_INFO_TIMEOUT,
+            )
+        except Exception:  # noqa: BLE001 - the name is optional
+            return ""
+        if isinstance(info, dict):
+            return str(info.get("group_name") or "").strip()
+        return ""
 
     async def list_characters(self, bot, group_id: str) -> list[Role]:
         raw = await self._with_retries(

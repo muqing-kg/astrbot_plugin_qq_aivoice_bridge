@@ -10,10 +10,12 @@ from astrbot.api.star import Context, Star, StarTools
 
 from .core.audio import AudioConverter, purge_legacy_cache_dir
 from .core.config import ConfigManager
+from .core.page_api import RolePageAPI
 from .core.pipeline import VoicePipeline
 from .core.qq_voice import QQVoiceClient
 from .core.state import StateStore
 from .handlers.commands import handle_role_command
+from .handlers.voice_test import handle_voice_test
 
 
 class QQAIVoiceBridgePlugin(Star):
@@ -37,6 +39,7 @@ class QQAIVoiceBridgePlugin(Star):
         )
         self.qq = QQVoiceClient(context, self.config)
         self.pipeline = VoicePipeline(self, self.qq, self.converter)
+        RolePageAPI(self).register()
 
     @filter.on_decorating_result()
     async def on_decorating_result(self, event):
@@ -46,6 +49,11 @@ class QQAIVoiceBridgePlugin(Star):
     @filter.permission_type(filter.PermissionType.ADMIN)
     async def role_command(self, event):
         yield event.plain_result(await handle_role_command(self, event))
+
+    @filter.command("声聊测试")
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    async def voice_test_command(self, event):
+        yield event.plain_result(await handle_voice_test(self, event))
 
     async def terminate(self):
         await self.pipeline.shutdown()

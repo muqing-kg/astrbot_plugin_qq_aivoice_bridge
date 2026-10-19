@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>声聊角色配置</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="page-head">
+        <div>
+          <h1>声聊角色</h1>
+          <p class="sub">每个群、每个私聊各自独立；没有配置的会话跟随全局默认。</p>
+        </div>
+        <div class="head-actions">
+          <span class="chip" id="defaultChip">全局默认：—</span>
+          <button id="refreshBtn" class="ghost" type="button">刷新</button>
+        </div>
+      </header>
+
+      <p id="status" class="status" hidden></p>
+      <p id="catalogNote" class="note" hidden></p>
+
+      <section class="card">
+        <table class="roles" id="roleTable" hidden>
+          <thead>
+            <tr>
+              <th>平台</th>
+              <th>会话</th>
+              <th>当前角色</th>
+              <th>改成</th>
+              <th class="actions-col"></th>
+            </tr>
+          </thead>
+          <tbody id="roleBody"></tbody>
+        </table>
+
+        <div id="empty" class="empty" hidden>
+          <p class="empty-title">还没有单独配置过角色</p>
+          <p class="empty-hint">
+            在群里发「声聊角色 序号」就能给这个群单独指定角色，配置过的会话会列在这里。
+          </p>
+        </div>
+
+        <p id="loading" class="empty-hint">加载中…</p>
+      </section>
+    </main>
+    <script src="./app.js"></script>
+  </body>
+</html>
