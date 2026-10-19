@@ -15,7 +15,7 @@ from .core.pipeline import VoicePipeline
 from .core.qq_voice import QQVoiceClient
 from .core.state import StateStore
 from .handlers.commands import handle_role_command
-from .handlers.voice_test import handle_voice_test
+from .handlers.voice_preview import handle_voice_preview
 
 
 class QQAIVoiceBridgePlugin(Star):
@@ -50,10 +50,10 @@ class QQAIVoiceBridgePlugin(Star):
     async def role_command(self, event):
         yield event.plain_result(await handle_role_command(self, event))
 
-    @filter.command("声聊测试")
+    @filter.command("声聊试听")
     @filter.permission_type(filter.PermissionType.ADMIN)
-    async def voice_test_command(self, event):
-        yield event.plain_result(await handle_voice_test(self, event))
+    async def voice_preview_command(self, event):
+        yield event.plain_result(await handle_voice_preview(self, event))
 
     async def terminate(self):
         await self.pipeline.shutdown()

@@ -1,26 +1,31 @@
-"""Bounds on the in-memory state a long-running process accumulates."""
+"""Persistence of the per-conversation role overrides."""
 
-from core.roles import Role
-from core.state import ROLE_CACHE_MAX_ENTRIES, StateStore
-
-ROLE = Role("lucy-voice-f36", "温柔妹妹")
+from core.state import StateStore
 
 
-def test_role_cache_stays_bounded(tmp_path):
+def test_overrides_survive_a_reload(tmp_path):
     store = StateStore(tmp_path)
-    total = ROLE_CACHE_MAX_ENTRIES * 3
-    for index in range(total):
-        store.set_cached_roles("qq-main", f"group{index}", [ROLE])
+    store.set_group_role("qq-main", "10086", "lucy-voice-f36")
+    store.set_group_role("wx-main", "private:abc", "lucy-voice-f34")
 
-    assert len(store._role_cache) == ROLE_CACHE_MAX_ENTRIES
-    assert store.get_cached_roles("qq-main", f"group{total - 1}") == [ROLE]
+    reloaded = StateStore(tmp_path)
+    reloaded.load()
+
+    assert reloaded.get_group_role("qq-main", "10086") == "lucy-voice-f36"
+    assert reloaded.get_group_role("wx-main", "private:abc") == "lucy-voice-f34"
+    assert reloaded.list_group_roles() == [
+        ("qq-main", "10086", "lucy-voice-f36"),
+        ("wx-main", "private:abc", "lucy-voice-f34"),
+    ]
 
 
-def test_role_cache_never_expires(tmp_path, monkeypatch):
-    """The QQ role catalog is fixed, so a cached list must not time out."""
+def test_clearing_an_override_drops_it_from_disk(tmp_path):
     store = StateStore(tmp_path)
-    store.set_cached_roles("qq-main", "10086", [ROLE])
+    store.set_group_role("qq-main", "10086", "lucy-voice-f36")
+    assert store.clear_group_role("qq-main", "10086") is True
 
-    monkeypatch.setattr("core.state.time.time", lambda: 10**9)
+    reloaded = StateStore(tmp_path)
+    reloaded.load()
 
-    assert store.get_cached_roles("qq-main", "10086") == [ROLE]
+    assert reloaded.get_group_role("qq-main", "10086") == ""
+    assert reloaded.list_group_roles() == []

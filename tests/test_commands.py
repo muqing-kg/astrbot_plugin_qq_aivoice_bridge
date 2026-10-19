@@ -121,17 +121,6 @@ def test_command_without_any_qq_group():
     assert reply == NO_RELAY_HINT
 
 
-def test_command_reports_empty_native_roles():
-    reply = asyncio.run(handle_role_command(FakePlugin(()), FakeEvent()))
-    assert reply.startswith("当前群没有返回可用的声聊角色")
-
-
-def test_command_reports_empty_relay_roles():
-    relay = SimpleNamespace(platform_id="qq-main", native=False)
-    reply = asyncio.run(handle_role_command(FakePlugin((), route=relay), FakeEvent()))
-    assert reply.startswith("中转群没有返回可用的声聊角色")
-
-
 def test_command_refused_when_disabled():
     reply = asyncio.run(
         handle_role_command(FakePlugin(ROLES, enabled=False), FakeEvent())

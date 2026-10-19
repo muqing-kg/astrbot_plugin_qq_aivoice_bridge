@@ -8,19 +8,15 @@ import types
 from types import SimpleNamespace
 
 from core.page_api import PLUGIN_NAME, RolePageAPI
-from core.roles import BUILTIN_ROLES, Role
+from core.roles import BUILTIN_ROLES
 
 
 class FakeState:
-    def __init__(self, entries=(), cached=None):
+    def __init__(self, entries=()):
         self.entries: list[tuple[str, str, str]] = list(entries)
-        self.cached = cached or {}
 
     def list_group_roles(self):
         return list(self.entries)
-
-    def get_cached_roles(self, platform_id, group_id):
-        return self.cached.get((platform_id, group_id), [])
 
     def set_group_role(self, platform_id, conversation, role_id):
         self.entries = [
@@ -41,12 +37,8 @@ class FakeState:
 
 
 class FakeQQ:
-    def __init__(self, relay=None, names=None):
-        self.relay = relay
+    def __init__(self, names=None):
         self.names = names or {}
-
-    def relay_route(self):
-        return self.relay
 
     async def group_display_name(self, platform_id, group_id):
         return self.names.get((platform_id, group_id), "")
@@ -134,26 +126,12 @@ def test_register_mounts_three_routes(monkeypatch):
     ]
 
 
-def test_list_roles_falls_back_to_the_builtin_catalog():
+def test_list_roles_serves_the_fixed_catalog():
     plugin = FakePlugin()
     data = asyncio.run(_api(plugin).list_roles())
 
-    assert data["catalog_source"] == "builtin"
     assert len(data["catalog"]) == len(BUILTIN_ROLES)
     assert data["entries"] == []
-
-
-def test_list_roles_prefers_the_live_catalog():
-    relay = SimpleNamespace(platform_id="qq-main", group_id="7777")
-    live = [Role("custom-1", "自定义角色")]
-    plugin = FakePlugin(
-        qq=FakeQQ(relay=relay),
-        state=FakeState(cached={("qq-main", "7777"): live}),
-    )
-    data = asyncio.run(_api(plugin).list_roles())
-
-    assert data["catalog_source"] == "live"
-    assert data["catalog"] == [{"role_id": "custom-1", "name": "自定义角色"}]
 
 
 def test_list_roles_resolves_names_and_marks_stale_ids():

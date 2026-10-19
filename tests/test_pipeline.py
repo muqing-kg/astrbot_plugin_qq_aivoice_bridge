@@ -40,24 +40,14 @@ class FakeConfig:
 
 
 class FakeState:
-    def __init__(self, roles=(ROLE,)):
-        self.roles = list(roles)
-
-    def get_cached_roles(self, *_args):
-        return list(self.roles)
-
-    def set_cached_roles(self, *_args):
-        return None
-
     def get_group_role(self, *_args):
         return ""
 
 
 class FakeQQ:
-    def __init__(self, *, native=False, generate_fails=False, roles=(ROLE,)):
+    def __init__(self, *, native=False, generate_fails=False):
         self.native = native
         self.generate_fails = generate_fails
-        self.roles = list(roles)
         self.spoken = []
 
     def is_configured_qq(self, _platform_id):
@@ -65,9 +55,6 @@ class FakeQQ:
 
     def resolve_route(self, _event):
         return QQRoute(object(), "qq-main", "10086", native=self.native)
-
-    async def list_characters(self, _bot, _group_id):
-        return list(self.roles)
 
     async def get_ai_record(self, _bot, _group_id, _role_id, text):
         if self.generate_fails:
@@ -362,9 +349,9 @@ def test_segments_without_a_role_still_send_text(monkeypatch, tmp_path):
     config.enable_segmentation = True
     config.send_text_with_tts = False
     config.segment_text_fallback = False
-    qq = FakeQQ(roles=())
+    qq = FakeQQ()
     pipeline = _build(monkeypatch, tmp_path, config, qq)
-    pipeline.plugin.state = FakeState(roles=())
+    pipeline._roles = list
     event = FakeEvent()
 
     asyncio.run(pipeline.handle_decorating_result(event))

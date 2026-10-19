@@ -1,29 +1,4 @@
-from core.roles import (
-    BUILTIN_ROLES,
-    format_role_list,
-    normalize_roles,
-    resolve_role,
-)
-
-
-def test_roles_are_deduplicated_by_id():
-    raw = [
-        {
-            "type": "推荐",
-            "characters": [
-                {"character_id": "a", "character_name": "甲"},
-                {"character_id": "b", "character_name": "乙"},
-            ],
-        },
-        {
-            "type": "其他",
-            "characters": [
-                {"character_id": "a", "character_name": "甲"},
-                {"character_id": "c", "character_name": "丙"},
-            ],
-        },
-    ]
-    assert [r.role_id for r in normalize_roles(raw)] == ["a", "b", "c"]
+from core.roles import BUILTIN_ROLES, format_role_list, resolve_role
 
 
 def test_role_resolution_by_number_name_and_id():

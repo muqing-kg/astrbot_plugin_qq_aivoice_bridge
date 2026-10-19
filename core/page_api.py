@@ -42,20 +42,8 @@ class RolePageAPI:
             )
         logger.info("[QQ声聊] 插件配置页面接口已注册")
 
-    def _catalog(self) -> tuple[list[Role], str]:
-        """Return the role list to offer, preferring the live QQ catalog.
-
-        The live catalog is only ever available through a relay group, so when
-        nothing is cached the built-in list stands in.
-        """
-        route = self.plugin.qq.relay_route()
-        if route:
-            cached = self.plugin.state.get_cached_roles(
-                route.platform_id, route.group_id
-            )
-            if cached:
-                return cached, "live"
-        return list(BUILTIN_ROLES), "builtin"
+    def _catalog(self) -> list[Role]:
+        return list(BUILTIN_ROLES)
 
     async def _group_names(self, entries) -> dict[tuple[str, str], str]:
         targets = [
@@ -97,7 +85,7 @@ class RolePageAPI:
         return data if isinstance(data, dict) else {}
 
     async def list_roles(self):
-        catalog, source = self._catalog()
+        catalog = self._catalog()
         default_id = self.plugin.config.default_role
         default_role = resolve_role(default_id, catalog) if default_id else None
         entries = self.plugin.state.list_group_roles()
@@ -129,7 +117,6 @@ class RolePageAPI:
                 "catalog": [
                     {"role_id": role.role_id, "name": role.name} for role in catalog
                 ],
-                "catalog_source": source,
                 "entries": rows,
             }
         )
@@ -144,7 +131,7 @@ class RolePageAPI:
         if not role_id:
             return self._error("请选择角色")
 
-        catalog, _ = self._catalog()
+        catalog = self._catalog()
         role = resolve_role(role_id, catalog)
         if role is None or role.role_id != role_id:
             return self._error(f"角色不存在：{role_id}")

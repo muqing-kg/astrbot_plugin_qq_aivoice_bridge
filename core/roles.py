@@ -1,7 +1,7 @@
-"""Verified QQ AI voice role registry.
+"""QQ AI voice role registry.
 
-The built-in list is a fallback. Runtime ``get_ai_characters`` output is
-always preferred.
+The table is fixed and ships with the plugin: roles are addressed by the same
+IDs QQ expects, so listing them never needs a round trip.
 """
 
 from __future__ import annotations
@@ -42,38 +42,6 @@ BUILTIN_ROLES: tuple[Role, ...] = (
 
 ROLE_BY_ID = {role.role_id: role for role in BUILTIN_ROLES}
 ROLE_BY_NAME = {role.name: role for role in BUILTIN_ROLES}
-
-
-def normalize_roles(raw) -> list[Role]:
-    """Flatten one or more ``get_ai_characters`` categories.
-
-    Deduplicates by role ID while preserving the first occurrence.
-    """
-    if not raw:
-        return []
-    if isinstance(raw, dict):
-        raw = [raw]
-    if not isinstance(raw, list):
-        return []
-
-    result: list[Role] = []
-    seen: set[str] = set()
-    for category in raw:
-        if not isinstance(category, dict):
-            continue
-        characters = category.get("characters")
-        if not isinstance(characters, list):
-            continue
-        for item in characters:
-            if not isinstance(item, dict):
-                continue
-            role_id = str(item.get("character_id") or "").strip()
-            name = str(item.get("character_name") or role_id).strip()
-            if not role_id or role_id in seen:
-                continue
-            seen.add(role_id)
-            result.append(Role(role_id, name or role_id))
-    return result
 
 
 def resolve_role(token: str, roles: list[Role] | None = None) -> Role | None:

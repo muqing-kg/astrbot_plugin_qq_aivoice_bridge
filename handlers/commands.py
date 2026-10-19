@@ -22,11 +22,6 @@ def parse_command_arg(message: str, cmd: str = COMMAND) -> str:
     return raw[match.end():].strip() if match else ""
 
 
-def _missing_roles_hint(route) -> str:
-    where = "当前群" if route.native else "中转群"
-    return f"{where}没有返回可用的声聊角色。请确认 QQ 侧已开通声聊，并检查插件配置。"
-
-
 async def handle_role_command(plugin, event) -> str:
     if not plugin.config.enabled:
         return "插件已停用，请先在插件配置里打开总开关。"
@@ -35,13 +30,10 @@ async def handle_role_command(plugin, event) -> str:
     if context is None:
         return NO_RELAY_HINT
 
-    route, roles = context
+    _, roles = context
     platform_id, conversation = conversation_key(event)
     if not conversation:
         return "无法识别当前会话，请稍后再试。"
-    if not roles:
-        logger.info("[QQ声聊] 会话 %s/%s 没有可用的声聊角色", platform_id, conversation)
-        return _missing_roles_hint(route)
 
     arg = parse_command_arg(event.message_str)
 

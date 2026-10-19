@@ -8,7 +8,6 @@ from dataclasses import dataclass
 import aiohttp
 from astrbot.api import logger
 
-from .roles import Role, normalize_roles
 from .text_utils import brief_error
 
 # A QQ voice clip is a few tens of KB; anything past this is not audio and is
@@ -190,17 +189,6 @@ class QQVoiceClient:
         if isinstance(info, dict):
             return str(info.get("group_name") or "").strip()
         return ""
-
-    async def list_characters(self, bot, group_id: str) -> list[Role]:
-        raw = await self._with_retries(
-            "获取声聊角色",
-            lambda: bot.call_action(
-                "get_ai_characters",
-                group_id=str(group_id),
-                chat_type=1,
-            ),
-        )
-        return normalize_roles(raw)
 
     async def get_ai_record(
         self,

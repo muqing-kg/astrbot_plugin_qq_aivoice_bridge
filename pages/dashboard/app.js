@@ -7,7 +7,6 @@
     catalog: [],
     entries: [],
     defaultRole: { role_id: "", name: "" },
-    catalog_source: "builtin",
   };
 
   const el = (id) => document.getElementById(id);
@@ -142,15 +141,6 @@
     const chip = el("defaultChip");
     chip.textContent = `全局默认：${state.defaultRole.name || "未设置"}`;
 
-    const note = el("catalogNote");
-    if (state.catalog_source === "builtin") {
-      note.textContent =
-        "当前显示的是插件内置角色表；中转群连上后刷新可拿到 QQ 实时角色列表。";
-      note.hidden = false;
-    } else {
-      note.hidden = true;
-    }
-
     const body = el("roleBody");
     const table = el("roleTable");
     const empty = el("empty");
@@ -196,7 +186,6 @@
       state.catalog = data.catalog || [];
       state.entries = data.entries || [];
       state.defaultRole = data.default || { role_id: "", name: "" };
-      state.catalog_source = data.catalog_source || "builtin";
       render();
     } catch (error) {
       el("loading").hidden = true;
