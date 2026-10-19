@@ -236,9 +236,6 @@
   async function deleteRole(index, row) {
     const entry = state.entries[index];
     const name = entry.group_name || entry.label || entry.conversation;
-    if (!window.confirm(`确定让「${name}」改回跟随全局角色？`)) {
-      return;
-    }
     setBusy(row, true);
     try {
       await (await bridge()).apiPost("page/roles/delete", {
